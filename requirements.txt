@@ -1,0 +1,7 @@
+Flask
+requests
+pandas
+plotly
+werkzeug
+xlrd
+openpyxl
