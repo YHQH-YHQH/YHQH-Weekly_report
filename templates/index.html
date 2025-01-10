@@ -69,38 +69,46 @@
             $.post("/login", {password: password})
                 .done(function () {
                     isAuthenticated = true;
-                    $("#mainContent").show(); // 显示页面内容
-                    loadStrategies(); // 加载策略列表
-                    loadTableData(); // 加载表格数据
+                    $("#mainContent").show();
+                    loadStrategies();
+                    loadTableData();
                 })
                 .fail(function () {
                     alert("密码错误，请重新输入！");
                     authenticate();
                 });
         }
-
+    
         // 动态加载策略选项
         function loadStrategies() {
-            $.get("/strategies", function (data) {
-                const strategySelect = $("#strategySelect");
-                strategySelect.empty();
-                strategySelect.append('<option value="">-- 选择产品策略 --</option>');
-                data.strategies.forEach(strategy => {
-                    strategySelect.append(`<option value="${strategy}">${strategy}</option>`);
+            if (!isAuthenticated) return; // 确保用户已登录
+            $.get("/strategies")
+                .done(function (data) {
+                    const strategySelect = $("#strategySelect");
+                    strategySelect.empty();
+                    strategySelect.append('<option value="">-- 选择产品策略 --</option>');
+                    data.strategies.forEach(strategy => {
+                        strategySelect.append(`<option value="${strategy}">${strategy}</option>`);
+                    });
+                })
+                .fail(function () {
+                    alert("加载策略选项失败！");
                 });
-            }).fail(function () {
-                alert("加载策略选项失败！");
-            });
         }
     
         // 动态加载表格数据
         function loadTableData() {
-            $.get("/table_data", function (data) {
-                renderTable(data.columns, data.data);
-            }).fail(function () {
-                alert("加载表格数据失败！");
-            });
+            if (!isAuthenticated) return; // 确保用户已登录
+            $.get("/table_data")
+                .done(function (data) {
+                    renderTable(data.columns, data.data);
+                })
+                .fail(function () {
+                    alert("加载表格数据失败！");
+                });
         }
+    
+        authenticate(); // 初始调用登录流程
     
         // 渲染表格数据
         function renderTable(columns, data) {
@@ -251,9 +259,6 @@
                     alert("生成合并图表请求失败！");
                 });
         });
-
-        // 验证密码并加载数据
-        authenticate();
     });
 </script>
 </body>
