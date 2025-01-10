@@ -56,6 +56,7 @@
     $(document).ready(function () {
         let sortColumn = null; // 当前排序列
         let sortOrder = "asc"; // 当前排序顺序
+        let isAuthenticated = false; // 当前未登录
 
         // 验证密码并加载页面
         function authenticate() {
