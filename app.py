@@ -64,8 +64,13 @@ initialize_database()
 
 @app.route("/")
 def index():
-    # 返回静态 HTML 页面，让前端处理登录逻辑
-    return render_template("index.html")
+    # 如果用户未登录，返回静态 HTML 页面，允许前端触发登录流程
+    if not session.get("logged_in"):
+        return render_template("index.html"), 200
+
+    # 已登录用户的逻辑
+    return render_template("index.html"), 200
+
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -82,11 +87,17 @@ def login():
 def require_login():
     open_routes = ["/", "/login", "static"]
     if request.endpoint not in open_routes and not session.get("logged_in"):
-        if request.endpoint in ("get_table_data", "get_strategies"):
-            # 返回空数据，不影响前端逻辑
+        # 专门处理 Render 的健康检查请求
+        if request.method == "HEAD" or (request.method == "GET" and "render.com" in request.host):
+            return "", 200
+
+        # 返回空数据而非错误
+        if request.endpoint in ["get_table_data", "get_strategies"]:
             return jsonify({"columns": [], "data": []}), 200
-        # 对其他受保护路由返回 401
+
+        # 默认返回未登录错误
         return jsonify({"error": "未登录"}), 401
+
 
 
 @app.route("/filter", methods=["POST"])
