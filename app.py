@@ -86,7 +86,7 @@ def index():
     # 获取数据并按指定顺序排序
     query = """
         SELECT * FROM products
-        ORDER BY 产品策略 ASC, 年化收益率 DESC, 本周收益 DESC
+        ORDER BY 产品策略 ASC, 年化收益率 DESC, 本周收益率 DESC
     """
     cursor.execute(query)
     data = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -98,6 +98,7 @@ def index():
     response = make_response(rendered_html)
     response.headers["Content-Type"] = "text/html; charset=utf-8"
     return response
+
 
 
 @app.route("/filter", methods=["POST"])
