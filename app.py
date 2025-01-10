@@ -80,9 +80,11 @@ def login():
 # 在受保护路由中验证登录状态
 @app.before_request
 def require_login():
-    # 允许公开访问的路由
     open_routes = ["/", "/login", "static"]
     if request.endpoint not in open_routes and not session.get("logged_in"):
+        if request.endpoint == "get_table_data" or request.endpoint == "get_strategies":
+            # 返回空数据而非错误
+            return jsonify({"columns": [], "data": []}), 200
         return jsonify({"error": "未登录"}), 401
 
 @app.route("/filter", methods=["POST"])
