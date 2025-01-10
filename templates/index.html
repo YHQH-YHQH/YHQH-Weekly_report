@@ -81,15 +81,18 @@
     
         // 动态加载策略选项
         function loadStrategies() {
-            if (!isAuthenticated) return; // 确保用户已登录
             $.get("/strategies")
                 .done(function (data) {
-                    const strategySelect = $("#strategySelect");
-                    strategySelect.empty();
-                    strategySelect.append('<option value="">-- 选择产品策略 --</option>');
-                    data.strategies.forEach(strategy => {
-                        strategySelect.append(`<option value="${strategy}">${strategy}</option>`);
-                    });
+                    if (data.strategies && data.strategies.length > 0) {
+                        const strategySelect = $("#strategySelect");
+                        strategySelect.empty();
+                        strategySelect.append('<option value="">-- 选择产品策略 --</option>');
+                        data.strategies.forEach(strategy => {
+                            strategySelect.append(`<option value="${strategy}">${strategy}</option>`);
+                        });
+                    } else {
+                        authenticate(); // 如果返回空数据，触发登录
+                    }
                 })
                 .fail(function () {
                     alert("加载策略选项失败！");
@@ -98,10 +101,13 @@
     
         // 动态加载表格数据
         function loadTableData() {
-            if (!isAuthenticated) return; // 确保用户已登录
             $.get("/table_data")
                 .done(function (data) {
-                    renderTable(data.columns, data.data);
+                    if (data.columns && data.columns.length > 0) {
+                        renderTable(data.columns, data.data);
+                    } else {
+                        authenticate(); // 如果返回空数据，触发登录
+                    }
                 })
                 .fail(function () {
                     alert("加载表格数据失败！");
