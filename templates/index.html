@@ -11,55 +11,37 @@
 <div class="container mt-4">
     <h1 class="text-center mb-4">产品净值比较(受保护的数据)</h1>
 
-    <!-- 主内容（默认隐藏） -->
+    <!-- 主内容 -->
     <div id="mainContent" style="display: none;">
         <!-- 筛选 -->
         <div class="row mb-3">
             <div class="col-md-4">
                 <label for="strategySelect" class="form-label">选择产品策略：</label>
                 <select id="strategySelect" class="form-select">
-                    <option value="all">-- 选择产品策略 --</option>
-                    {% for strategy in strategies %}
-                    <option value="{{ strategy }}">{{ strategy }}</option>
-                    {% endfor %}
+                    <option value="">-- 选择产品策略 --</option>
                 </select>
             </div>
             <div class="col-md-6">
-                <label for="searchInput" class="form-label">搜索产品（代码或名称）：</label>
+                <label for="searchInput" class="form-label">搜索产品：</label>
                 <input type="text" id="searchInput" class="form-control" placeholder="输入关键字，逗号分隔">
             </div>
             <div class="col-md-2 d-flex align-items-end">
-                <button id="searchDisplayButton" class="btn btn-primary w-100 me-2">搜索并展示</button>
+                <button id="searchButton" class="btn btn-primary w-100 me-2">搜索并展示</button>
                 <button id="searchAddButton" class="btn btn-secondary w-100">搜索并添加</button>
             </div>
         </div>
 
         <!-- 数据表 -->
-        <div class="table-responsive">
-            <table id="productTable" class="table table-bordered table-striped">
-                <thead>
+        <table id="productTable" class="table table-bordered table-striped">
+            <thead>
                 <tr>
-                    {% for column in columns %}
-                    <th class="sortable" data-column="{{ column }}">{{ column }}</th>
-                    {% endfor %}
-                    <th>操作</th>
+                    <!-- 表头动态填充 -->
                 </tr>
-                </thead>
-                <tbody>
-                {% for row in data %}
-                <tr>
-                    {% for column in columns %}
-                    <td>{{ row[column] or '' }}</td>
-                    {% endfor %}
-                    <td>
-                        <button class="btn btn-danger btn-sm delete-row" data-code="{{ row['产品代码'] }}">删除</button>
-                        <button class="btn btn-info btn-sm download-chart" data-code="{{ row['产品代码'] }}">下载图表</button>
-                    </td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
+            </thead>
+            <tbody>
+                <!-- 数据动态填充 -->
+            </tbody>
+        </table>
 
         <!-- 图表生成 -->
         <div class="row mt-4">
@@ -72,205 +54,204 @@
 
 <script>
     $(document).ready(function () {
-        let userPassword = null;  // 用于存储用户输入的密码
-        let sortColumnIndex = null;  // 当前排序的列索引
-        let sortDirection = "asc";  // 当前排序方向
-    
-        // 弹窗获取密码
-        function promptForPassword() {
-            userPassword = prompt("请输入访问密码：");
-            if (!userPassword) {
-                alert("必须输入密码才能访问网站！");
-                promptForPassword();
-                return;
+        let sortColumn = null; // 当前排序列
+        let sortOrder = "asc"; // 当前排序顺序
+
+        // 验证密码并加载页面
+        function authenticate() {
+            const password = prompt("请输入访问密码：");
+            if (!password) {
+                alert("密码不能为空！");
+                return authenticate();
             }
-    
-            // 验证密码
-            $.ajax({
-                url: '/',  // 向后端发送验证请求
-                type: 'GET',
-                data: {password: userPassword},
-                success: function () {
-                    $('#mainContent').show(); // 显示主内容
-                    alert("密码验证成功，欢迎访问！");
-                },
-                error: function (xhr) {
-                    if (xhr.status === 401 || xhr.status === 403) {
-                        alert("密码错误，请重新输入！");
-                        promptForPassword();
-                    } else {
-                        alert("服务器错误，请稍后再试！");
-                    }
-                }
+
+            $.post("/login", {password: password})
+                .done(function () {
+                    $("#mainContent").show();
+                    loadStrategies();
+                    loadTableData();
+                })
+                .fail(function () {
+                    alert("密码错误！");
+                    authenticate();
+                });
+        }
+
+        // 动态加载策略选项
+        function loadStrategies() {
+            $.get("/", function (data) {
+                const strategySelect = $("#strategySelect");
+                strategySelect.empty();
+                strategySelect.append('<option value="">-- 选择产品策略 --</option>');
+                data.strategies.forEach(strategy => {
+                    strategySelect.append(`<option value="${strategy}">${strategy}</option>`);
+                });
+            }).fail(function () {
+                alert("加载策略选项失败！");
             });
         }
-    
-        // 页面加载时调用密码弹窗
-        promptForPassword();
-    
-        // 点击列名排序功能
-        $('.sortable').click(function () {
-            const columnIndex = $(this).index();  // 获取点击的列索引
-    
-            // 如果点击的列是当前列，则切换排序方向
-            if (sortColumnIndex === columnIndex) {
-                sortDirection = sortDirection === "asc" ? "desc" : "asc";
-            } else {
-                // 如果点击的是新列，重置为升序
-                sortColumnIndex = columnIndex;
-                sortDirection = "asc";
-            }
-    
-            // 获取表格的所有行数据
-            const rows = $('#productTable tbody tr').get();
-    
-            // 使用 Array.sort 进行排序
-            rows.sort(function (a, b) {
-                const cellA = $(a).children('td').eq(columnIndex).text().trim();
-                const cellB = $(b).children('td').eq(columnIndex).text().trim();
-    
-                // 判断内容是否为数字
-                const valueA = isNaN(cellA) ? cellA : parseFloat(cellA);
-                const valueB = isNaN(cellB) ? cellB : parseFloat(cellB);
-    
-                if (sortDirection === "asc") {
-                    return valueA > valueB ? 1 : (valueA < valueB ? -1 : 0);
-                } else {
-                    return valueA < valueB ? 1 : (valueA > valueB ? -1 : 0);
-                }
+
+        // 动态加载表格数据
+        function loadTableData() {
+            $.get("/", function (data) {
+                renderTable(data.columns, data.data);
+            }).fail(function () {
+                alert("加载表格数据失败！");
             });
-    
-            // 将排序后的行重新附加到表格中
-            $.each(rows, function (index, row) {
-                $('#productTable tbody').append(row);
-            });
-    
-            // 可选：在列头显示升序/降序标志
-            $('.sortable').removeClass('asc desc');  // 移除其他列的排序状态
-            $(this).addClass(sortDirection);  // 添加当前列的排序状态
-        });
-    
-        // 筛选逻辑
-        $('#strategySelect').change(function () {
-            const selectedStrategy = $(this).val();
-            if (selectedStrategy) {
-                $.post('/filter', {strategy: selectedStrategy}, function (data) {
-                    if (Array.isArray(data)) {
-                        updateTable(data);  // 更新表格
-                    } else {
-                        alert('筛选失败：无效的响应数据');
-                    }
-                }).fail(function (xhr, status, error) {
-                    console.error('筛选请求失败:', status, error);
-                    alert('筛选失败：网络或服务器错误，请稍后重试');
-                });
-            } else {
-                alert('请选择一个产品策略');
-            }
-        });
-    
-        // 搜索并展示
-        $('#searchDisplayButton').click(function () {
-            const keywords = $('#searchInput').val();
-            if (keywords.trim() === "") {
-                alert('请输入搜索关键字');
-                return;
-            }
-    
-            $.post('/search', {keywords: keywords}, function (data) {
-                if (Array.isArray(data)) {
-                    updateTable(data);  // 清空表格并展示搜索结果
-                } else {
-                    alert('搜索失败：无效的响应数据');
-                }
-            }).fail(function (xhr, status, error) {
-                console.error('搜索请求失败:', status, error);
-                alert('搜索失败：网络或服务器错误，请稍后重试');
-            });
-        });
-    
-        // 搜索并添加
-        $('#searchAddButton').click(function () {
-            const keywords = $('#searchInput').val();
-            if (keywords.trim() === "") {
-                alert('请输入搜索关键字');
-                return;
-            }
-    
-            $.post('/search', {keywords: keywords}, function (data) {
-                if (Array.isArray(data)) {
-                    const tableBody = $('#productTable tbody');
-                    const existingProductCodes = new Set();
-                    $('#productTable tbody tr').each(function () {
-                        const productCode = $(this).find('td:first').text();
-                        existingProductCodes.add(productCode);
-                    });
-    
-                    // 确保不重复添加已存在的数据
-                    data.forEach(row => {
-                        if (!existingProductCodes.has(row['产品代码'])) {
-                            let tableRow = '<tr>';
-                            for (const key in row) {
-                                tableRow += `<td>${row[key] || ''}</td>`;
-                            }
-                            tableRow += `
-                                <td>
-                                    <button class="btn btn-danger btn-sm delete-row" data-code="${row['产品代码']}">删除</button>
-                                    <button class="btn btn-info btn-sm download-chart" data-code="${row['产品代码']}">下载图表</button>
-                                </td>`;
-                            tableRow += '</tr>';
-                            tableBody.prepend(tableRow);
-                        }
-                    });
-                } else {
-                    alert('搜索失败：无效的响应数据');
-                }
-            }).fail(function (xhr, status, error) {
-                console.error('搜索请求失败:', status, error);
-                alert('搜索失败：网络或服务器错误，请稍后重试');
-            });
-        });
-    
-        // 删除逻辑
-        $(document).on('click', '.delete-row', function () {
-            const $button = $(this);
-            const productCode = $button.data('code');
-        
-            if (confirm('确定要从当前视图移除此产品吗？')) {
-                $button.closest('tr').remove();
-                alert('已从当前视图移除');
-            }
-        });
-    
-        // 下载图表
-        $(document).on('click', '.download-chart', function () {
-            const productCode = $(this).data('code');
-            window.location.href = `/download_chart/${productCode}`;
-        });
-    
-        // 更新表格内容
-        function updateTable(data) {
-            const tableBody = $('#productTable tbody');
+        }
+
+        // 渲染表格数据
+        function renderTable(columns, data) {
+            const tableHead = $("#productTable thead tr");
+            const tableBody = $("#productTable tbody");
+            tableHead.empty();
             tableBody.empty();
-    
-            if (data.length === 0) {
-                tableBody.append('<tr><td colspan="13" class="text-center">没有符合条件的产品</td></tr>');
-                return;
-            }
-    
+
+            // 渲染表头
+            columns.forEach(column => {
+                tableHead.append(`<th class="sortable" data-column="${column}">${column}</th>`);
+            });
+            tableHead.append("<th>操作</th>");
+
+            // 渲染数据
             data.forEach(row => {
-                let tableRow = '<tr>';
-                for (const key in row) {
-                    tableRow += `<td>${row[key] || ''}</td>`;
-                }
+                let tableRow = "<tr>";
+                columns.forEach(column => {
+                    tableRow += `<td>${row[column] || ""}</td>`;
+                });
                 tableRow += `
                     <td>
                         <button class="btn btn-danger btn-sm delete-row" data-code="${row['产品代码']}">删除</button>
                         <button class="btn btn-info btn-sm download-chart" data-code="${row['产品代码']}">下载图表</button>
                     </td>`;
+                tableRow += "</tr>";
                 tableBody.append(tableRow);
             });
         }
+
+        // 筛选数据
+        $("#strategySelect").change(function () {
+            const strategy = $(this).val();
+            $.post("/filter", {strategy: strategy})
+                .done(function (data) {
+                    renderTable(data.columns, data.data);
+                })
+                .fail(function () {
+                    alert("筛选失败！");
+                });
+        });
+
+        // 搜索并展示
+        $("#searchButton").click(function () {
+            const keywords = $("#searchInput").val();
+            if (!keywords.trim()) {
+                alert("请输入搜索关键字！");
+                return;
+            }
+
+            $.post("/search", {keywords: keywords})
+                .done(function (data) {
+                    renderTable(data.columns, data.data);
+                })
+                .fail(function () {
+                    alert("搜索失败！");
+                });
+        });
+
+        // 搜索并添加
+        $("#searchAddButton").click(function () {
+            const keywords = $("#searchInput").val();
+            if (!keywords.trim()) {
+                alert("请输入搜索关键字！");
+                return;
+            }
+
+            $.post("/search", {keywords: keywords})
+                .done(function (data) {
+                    if (Array.isArray(data)) {
+                        const tableBody = $("#productTable tbody");
+                        const existingProductCodes = new Set();
+                        // 获取当前表格中所有产品代码
+                        $("#productTable tbody tr").each(function () {
+                            const productCode = $(this).find("td:first").text();
+                            existingProductCodes.add(productCode);
+                        });
+
+                        // 确保不重复添加已存在的数据
+                        data.forEach(row => {
+                            if (!existingProductCodes.has(row["产品代码"])) {
+                                let tableRow = "<tr>";
+                                Object.keys(row).forEach(key => {
+                                    tableRow += `<td>${row[key] || ""}</td>`;
+                                });
+                                tableRow += `
+                                    <td>
+                                        <button class="btn btn-danger btn-sm delete-row" data-code="${row["产品代码"]}">删除</button>
+                                        <button class="btn btn-info btn-sm download-chart" data-code="${row["产品代码"]}">下载图表</button>
+                                    </td>`;
+                                tableRow += "</tr>";
+                                tableBody.prepend(tableRow); // 插入到表格顶部
+                            }
+                        });
+                    } else {
+                        alert("搜索失败：无效的响应数据！");
+                    }
+                })
+                .fail(function () {
+                    alert("搜索失败！");
+                });
+        });
+
+        // 删除数据
+        $(document).on("click", ".delete-row", function () {
+            const productCode = $(this).data("code");
+            if (confirm("确定要删除该产品吗？")) {
+                $.post("/delete_row", {product_code: productCode})
+                    .done(function () {
+                        alert("删除成功！");
+                        loadTableData();
+                    })
+                    .fail(function () {
+                        alert("删除失败！");
+                    });
+            }
+        });
+
+        // 下载图表
+        $(document).on("click", ".download-chart", function () {
+            const productCode = $(this).data("code");
+            window.location.href = `/download_chart/${productCode}`;
+        });
+
+        // 点击“生成合并图表”按钮
+        $("#generateChartButton").click(function () {
+            const productCodes = [];
+            $("#productTable tbody tr").each(function () {
+                const productCode = $(this).find("td:first").text();
+                productCodes.push(productCode);
+            });
+
+            if (productCodes.length === 0) {
+                alert("没有产品可生成图表！");
+                return;
+            }
+
+            $.post("/add_chart", {product_codes: productCodes})
+                .done(function (data) {
+                    if (data.success && data.chart_path) {
+                        alert("合并图表生成成功！");
+                        window.open(data.chart_path, "_blank");
+                    } else {
+                        alert("生成合并图表失败！");
+                    }
+                })
+                .fail(function () {
+                    alert("生成合并图表请求失败！");
+                });
+        });
+
+        // 验证密码并加载数据
+        authenticate();
     });
 </script>
 </body>
