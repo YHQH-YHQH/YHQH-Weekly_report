@@ -54,34 +54,13 @@
 
 <script>
     $(document).ready(function () {
+        const password = prompt("请输入访问密码：");
         let sortColumn = null; // 当前排序列
         let sortOrder = "asc"; // 当前排序顺序
-        let isAuthenticated = false; // 当前未登录
-
-        // 验证密码并加载页面
-        function authenticate() {
-            const password = prompt("请输入访问密码：");
-            if (!password) {
-                alert("密码不能为空！");
-                return authenticate();
-            }
-    
-            $.post("/login", {password: password})
-                .done(function () {
-                    isAuthenticated = true;
-                    $("#mainContent").show();
-                    loadStrategies();
-                    loadTableData();
-                })
-                .fail(function () {
-                    alert("密码错误，请重新输入！");
-                    authenticate();
-                });
-        }
     
         // 动态加载策略选项
         function loadStrategies() {
-            $.get("/strategies")
+            $.get("/strategies", {password: password})
                 .done(function (data) {
                     if (data.strategies && data.strategies.length > 0) {
                         const strategySelect = $("#strategySelect");
@@ -91,7 +70,7 @@
                             strategySelect.append(`<option value="${strategy}">${strategy}</option>`);
                         });
                     } else {
-                        authenticate(); // 如果返回空数据，触发登录
+                        const password = prompt("请输入访问密码："); // 如果返回空数据，触发登录
                     }
                 })
                 .fail(function () {
@@ -101,12 +80,12 @@
     
         // 动态加载表格数据
         function loadTableData() {
-            $.get("/table_data")
+            $.get("/table_data", {password: password})
                 .done(function (data) {
                     if (data.columns && data.columns.length > 0) {
                         renderTable(data.columns, data.data);
                     } else {
-                        authenticate(); // 如果返回空数据，触发登录
+                        const password = prompt("请输入访问密码："); // 如果返回空数据，触发登录
                     }
                 })
                 .fail(function () {
@@ -114,7 +93,8 @@
                 });
         }
     
-        authenticate(); // 初始调用登录流程
+        loadStrategies(); 
+        loadTableData();// 初始调用登录流程
     
         // 渲染表格数据
         function renderTable(columns, data) {
@@ -148,7 +128,7 @@
         // 筛选数据
         $("#strategySelect").change(function () {
             const strategy = $(this).val();
-            $.post("/filter", {strategy: strategy})
+            $.post("/filter", {strategy: strategy, password: password})
                 .done(function (data) {
                     renderTable(data.columns, data.data);
                 })
@@ -165,7 +145,7 @@
                 return;
             }
 
-            $.post("/search", {keywords: keywords})
+            $.post("/search", {keywords: keywords, password: password})
                 .done(function (data) {
                     renderTable(data.columns, data.data);
                 })
@@ -182,7 +162,7 @@
                 return;
             }
 
-            $.post("/search", {keywords: keywords})
+            $.post("/search", {keywords: keywords, password: password})
                 .done(function (data) {
                     if (Array.isArray(data)) {
                         const tableBody = $("#productTable tbody");
@@ -252,7 +232,7 @@
                 return;
             }
 
-            $.post("/add_chart", {product_codes: productCodes})
+            $.post("/add_chart", {product_codes: productCodes, password: password})
                 .done(function (data) {
                     if (data.success && data.chart_path) {
                         alert("合并图表生成成功！");
