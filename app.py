@@ -64,14 +64,9 @@ initialize_database()
 
 @app.route("/")
 def index():
-    if not session.get("logged_in"):
-        return jsonify({"error": "未登录，请先登录"}), 401
-
-    # 返回静态 HTML 页面，数据由前端动态加载
+    # 返回静态 HTML 页面，让前端处理登录逻辑
     return render_template("index.html")
-    
 
-# 登录验证
 @app.route("/login", methods=["POST"])
 def login():
     password = request.form.get("password")
@@ -82,18 +77,12 @@ def login():
     logging.warning("用户登录失败")
     return jsonify({"error": "密码错误"}), 401
 
-# 全局请求拦截器：检查是否已登录
+# 在受保护路由中验证登录状态
 @app.before_request
 def require_login():
-    # 不需要验证的路径
-    open_routes = ["login", "static", "index"]
-
-    # 当前请求的端点
-    endpoint = request.endpoint
-
-    # 如果是未登录用户且访问受保护路径
-    if endpoint not in open_routes and not session.get("logged_in"):
-        logging.warning(f"未登录用户试图访问受保护路径：{endpoint}")
+    # 允许公开访问的路由
+    open_routes = ["/", "/login", "static"]
+    if request.endpoint not in open_routes and not session.get("logged_in"):
         return jsonify({"error": "未登录"}), 401
 
 @app.route("/filter", methods=["POST"])
