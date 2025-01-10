@@ -82,10 +82,12 @@ def login():
 def require_login():
     open_routes = ["/", "/login", "static"]
     if request.endpoint not in open_routes and not session.get("logged_in"):
-        if request.endpoint == "get_table_data" or request.endpoint == "get_strategies":
-            # 返回空数据而非错误
+        if request.endpoint in ("get_table_data", "get_strategies"):
+            # 返回空数据，不影响前端逻辑
             return jsonify({"columns": [], "data": []}), 200
+        # 对其他受保护路由返回 401
         return jsonify({"error": "未登录"}), 401
+
 
 @app.route("/filter", methods=["POST"])
 def filter_data():
