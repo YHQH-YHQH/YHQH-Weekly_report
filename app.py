@@ -64,28 +64,11 @@ initialize_database()
 
 @app.route("/")
 def index():
-    try:
-        conn = sqlite3.connect(DATABASE_FILE)
-        cursor = conn.cursor()
+    if not session.get("logged_in"):
+        return jsonify({"error": "未登录，请先登录"}), 401
 
-        # 获取产品策略和表格数据
-        cursor.execute("SELECT DISTINCT 产品策略 FROM products")
-        strategies = [row[0] for row in cursor.fetchall()]
-
-        cursor.execute("PRAGMA table_info(products)")
-        columns = [row[1] for row in cursor.fetchall()]
-
-        cursor.execute("""
-            SELECT * FROM products
-            ORDER BY 产品策略 ASC, 年化收益率 DESC, 本周收益率 DESC
-        """)
-        data = cursor.fetchall()
-
-        conn.close()
-        return jsonify({"strategies": strategies, "columns": columns, "data": data})
-    except Exception as e:
-        logging.error(f"加载首页数据时出现错误：{e}")
-        return jsonify({"error": "服务器错误"}), 500
+    # 返回静态 HTML 页面，数据由前端动态加载
+    return render_template("index.html")
     
 
 # 登录验证
@@ -139,6 +122,47 @@ def filter_data():
     except Exception as e:
         logging.error(f"筛选数据时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
+
+@app.route("/strategies")
+def get_strategies():
+    if not session.get("logged_in"):
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT 产品策略 FROM products")
+        strategies = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return jsonify({"strategies": strategies})
+    except Exception as e:
+        logging.error(f"获取策略列表时出现错误：{e}")
+        return jsonify({"error": "服务器错误"}), 500
+
+@app.route("/table_data")
+def get_table_data():
+    if not session.get("logged_in"):
+        return jsonify({"error": "未登录"}), 401
+
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+
+        cursor.execute("PRAGMA table_info(products)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        cursor.execute("""
+            SELECT * FROM products
+            ORDER BY 产品策略 ASC, 年化收益率 DESC, 本周收益率 DESC
+        """)
+        data = cursor.fetchall()
+
+        conn.close()
+        return jsonify({"columns": columns, "data": data})
+    except Exception as e:
+        logging.error(f"获取表格数据时出现错误：{e}")
+        return jsonify({"error": "服务器错误"}), 500
+
 
 @app.route("/search", methods=["POST"])
 def search_data():
