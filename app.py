@@ -83,19 +83,22 @@ def index():
     cursor.execute("PRAGMA table_info(products)")
     columns = [row[1] for row in cursor.fetchall()]
 
-    # 获取数据
-    cursor.execute("SELECT * FROM products")
-    data = cursor.fetchall()
+    # 获取数据并按指定顺序排序
+    query = """
+        SELECT * FROM products
+        ORDER BY 产品策略 ASC, 年化收益率 DESC, 本周收益 DESC
+    """
+    cursor.execute(query)
+    data = [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     conn.close()
 
     # 渲染模板
     rendered_html = render_template("index.html", strategies=strategies, columns=columns, data=data)
-
-    # 设置 Content-Type 为 text/html
     response = make_response(rendered_html)
     response.headers["Content-Type"] = "text/html; charset=utf-8"
     return response
+
 
 @app.route("/filter", methods=["POST"])
 def filter_data():
@@ -158,19 +161,19 @@ def add_chart():
     try:
         product_codes = request.form.getlist("product_codes[]")
         if not product_codes:
-            return jsonify({"error": "No product codes provided"}), 400
+            return jsonify({"error": "未提供产品代码"}), 400
 
         chart_path = create_subplots(product_codes)
         if not chart_path:
-            return jsonify({"error": "Failed to generate chart"}), 500
+            return jsonify({"error": "合并图表生成失败"}), 500
 
-        filename = os.path.basename(chart_path)
-        chart_url = f"/output_charts/{filename}"
-        return jsonify({"success": True, "chart_path": chart_url})
+        print(f"合并图表已成功生成：{chart_path}")
+        return jsonify({"success": True, "chart_path": f"/output_charts/{os.path.basename(chart_path)}"})
 
     except Exception as e:
-        print(f"处理图表生成时出现异常: {e}")
-        return jsonify({"error": "Server error"}), 500
+        print(f"生成合并图表时出现异常: {e}")
+        return jsonify({"error": "服务器错误"}), 500
+
     
 @app.route("/download_chart/<product_code>")
 def download_chart(product_code):
@@ -226,15 +229,14 @@ def create_subplots(product_codes):
         all_dates = []
         product_data = {}
 
-        # 下载 Excel 文件并建立产品代码与名称的映射
+        # 连接数据库获取产品代码和名称映射
         conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "data.db"))
         cursor = conn.cursor()
         cursor.execute("SELECT 产品代码, 产品名称 FROM products")
         product_mapping = dict(cursor.fetchall())
         conn.close()
-        print(f"产品代码与名称映射: {product_mapping}")
 
-        # 加载每个产品对应的 JSON 文件
+        # 加载每个产品的图表数据
         for product_code in product_codes:
             json_url = urljoin(BASE_URL, f"{input_folder}/{product_code}_chart.json")
             response = requests.get(json_url, auth=AUTH)
@@ -245,11 +247,10 @@ def create_subplots(product_codes):
                         for trace in plotly_data["data"]:
                             x_dates = pd.to_datetime(trace["x"])
                             y_values = trace["y"]
-                            if len(x_dates) > 0 and len(y_values) > 0:
-                                all_dates.extend(x_dates)
-                                product_data[product_code] = {"x": x_dates, "y": y_values}
+                            all_dates.extend(x_dates)
+                            product_data[product_code] = {"x": x_dates, "y": y_values}
                 except json.JSONDecodeError as e:
-                    print(f"错误：无法解析 JSON 文件 {json_url}: {e}")
+                    print(f"警告：无法解析 JSON 文件 {json_url}: {e}")
             else:
                 print(f"警告：未找到图表数据文件 {json_url}")
 
@@ -257,16 +258,17 @@ def create_subplots(product_codes):
             print("错误：没有有效数据用于生成图表。")
             return None
 
-        # 日期范围和布局初始化
-        min_date = min(all_dates)
-        max_date = max(all_dates)
+        # 日期范围补全
+        min_date, max_date = min(all_dates), max(all_dates)
         full_x_range = pd.date_range(start=min_date, end=max_date, freq="D")
 
-        # 设置子图布局
+        # 动态布局：计算子图行和列
         n = len(product_codes)
         rows = int((n - 1) ** 0.5) + 1
         cols = rows
-        fig = make_subplots(rows=rows, cols=cols)
+        fig = make_subplots(rows=rows, cols=cols, subplot_titles=[
+            f"{product_mapping.get(code, '未知产品')} ({code})" for code in product_codes
+        ])
 
         # 填充子图数据
         for i, product_code in enumerate(product_codes):
@@ -275,8 +277,17 @@ def create_subplots(product_codes):
             if product_code in product_data:
                 x_data = product_data[product_code]["x"]
                 y_data = product_data[product_code]["y"]
+
+                # 补齐日期范围
+                full_y_data = [None] * len(full_x_range)
+                x_to_index = {date: idx for idx, date in enumerate(full_x_range)}
+                for x, y in zip(x_data, y_data):
+                    if x in x_to_index:
+                        full_y_data[x_to_index[x]] = y
+
+                # 添加到子图
                 fig.add_trace(
-                    go.Scatter(x=x_data, y=y_data, name=product_code),
+                    go.Scatter(x=full_x_range, y=full_y_data, name=product_code),
                     row=row, col=col
                 )
 
@@ -289,6 +300,7 @@ def create_subplots(product_codes):
     except Exception as e:
         print(f"生成子图时出现异常: {e}")
         return None
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
