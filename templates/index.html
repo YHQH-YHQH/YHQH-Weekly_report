@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,12 +10,6 @@
 <body>
 <div class="container mt-4">
     <h1 class="text-center mb-4">产品净值比较(受保护的数据)</h1>
-
-    <!-- 密码输入表单 -->
-    <div id="passwordContainer" class="text-center">
-        <input type="password" id="passwordInput" class="form-control mb-3" placeholder="请输入访问密码">
-        <button id="passwordSubmit" class="btn btn-primary">提交密码</button>
-    </div>
 
     <!-- 主内容（默认隐藏） -->
     <div id="mainContent" style="display: none;">
@@ -80,34 +74,37 @@
     $(document).ready(function () {
         let userPassword = null;  // 用于存储用户输入的密码
 
-        // 提交密码
-        $('#passwordSubmit').click(function () {
-            const password = $('#passwordInput').val();
-            if (!password) {
-                alert("请输入密码");
+        // 弹窗获取密码
+        function promptForPassword() {
+            userPassword = prompt("请输入访问密码：");
+            if (!userPassword) {
+                alert("必须输入密码才能访问网站！");
+                promptForPassword();
                 return;
             }
 
-            // 尝试验证密码
+            // 验证密码
             $.ajax({
                 url: '/',  // 向后端发送验证请求
                 type: 'GET',
-                data: {password: password},
+                data: {password: userPassword},
                 success: function () {
-                    userPassword = password;
-                    $('#passwordContainer').hide();
-                    $('#mainContent').show();
+                    $('#mainContent').show(); // 显示主内容
                     alert("密码验证成功，欢迎访问！");
                 },
                 error: function (xhr) {
                     if (xhr.status === 401 || xhr.status === 403) {
-                        alert("密码错误，请重试");
+                        alert("密码错误，请重新输入！");
+                        promptForPassword();
                     } else {
-                        alert("服务器错误，请稍后再试");
+                        alert("服务器错误，请稍后再试！");
                     }
                 }
             });
-        });
+        }
+
+        // 页面加载时调用密码弹窗
+        promptForPassword();
 
         // 筛选逻辑
         $('#strategySelect').change(function () {
