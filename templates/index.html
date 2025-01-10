@@ -18,7 +18,7 @@
             <div class="col-md-4">
                 <label for="strategySelect" class="form-label">选择产品策略：</label>
                 <select id="strategySelect" class="form-select">
-                    <option value="">-- 选择产品策略 --</option>
+                    <option value="all">-- 选择产品策略 --</option>
                     {% for strategy in strategies %}
                     <option value="{{ strategy }}">{{ strategy }}</option>
                     {% endfor %}
@@ -109,20 +109,16 @@
         // 筛选逻辑
         $('#strategySelect').change(function () {
             const selectedStrategy = $(this).val();
-            if (selectedStrategy) {
-                $.post('/filter', {strategy: selectedStrategy, password: userPassword}, function (data) {
-                    if (Array.isArray(data)) {
-                        updateTable(data);  // 更新表格
-                    } else {
-                        alert('筛选失败：无效的响应数据');
-                    }
-                }).fail(function (xhr, status, error) {
-                    console.error('筛选请求失败:', status, error);
-                    alert('筛选失败：网络或服务器错误，请稍后重试');
-                });
-            } else {
-                alert('请选择一个产品策略');
-            }
+            $.post('/filter', {strategy: selectedStrategy}, function (data) {
+                if (Array.isArray(data)) {
+                    updateTable(data);  // 更新表格
+                } else {
+                    alert('筛选失败：无效的响应数据');
+                }
+            }).fail(function (xhr, status, error) {
+                console.error('筛选请求失败:', status, error);
+                alert('筛选失败：网络或服务器错误，请稍后重试');
+            });
         });
 
         // 搜索并展示
@@ -133,7 +129,7 @@
                 return;
             }
 
-            $.post('/search', {keywords: keywords, password: userPassword}, function (data) {
+            $.post('/search', {keywords: keywords}, function (data) {
                 if (Array.isArray(data)) {
                     updateTable(data);  // 清空表格并展示搜索结果
                 } else {
@@ -153,7 +149,7 @@
                 return;
             }
 
-            $.post('/search', {keywords: keywords, password: userPassword}, function (data) {
+            $.post('/search', {keywords: keywords}, function (data) {
                 if (Array.isArray(data)) {
                     const tableBody = $('#productTable tbody');
                     const existingProductCodes = new Set();
@@ -201,7 +197,31 @@
         // 下载图表
         $(document).on('click', '.download-chart', function () {
             const productCode = $(this).data('code');
-            window.location.href = `/download_chart/${productCode}?password=${userPassword}`;
+            window.location.href = `/download_chart/${productCode}`;
+        });
+
+        // 生成合并图表
+        $('#generateChartButton').click(function () {
+            const productCodes = [];
+            $('#productTable tbody tr').each(function () {
+                const productCode = $(this).find('td:first').text();
+                productCodes.push(productCode);
+            });
+
+            if (productCodes.length > 0) {
+                alert('合并图表请求成功'); // 前端提示
+                $.post('/add_chart', {product_codes: productCodes}, function (data) {
+                    if (data.success && data.chart_path) {
+                        window.open(data.chart_path, '_blank');
+                    } else {
+                        alert('生成图表失败：' + (data.error || '未知错误'));
+                    }
+                }).fail(function (xhr, status, error) {
+                    alert('生成图表失败：网络或服务器错误，请稍后再试');
+                });
+            } else {
+                alert('没有可用于生成图表的数据');
+            }
         });
 
         // 更新表格内容
