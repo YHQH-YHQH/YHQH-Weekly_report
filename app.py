@@ -34,23 +34,6 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 DATABASE_FILE = os.path.join(PROJECT_ROOT, "data.db")
 EXCEL_FILE = "产品净值数据/WeeklyReport_各项指标.xlsx"
 
-# 登录验证
-@app.route("/login", methods=["POST"])
-def login():
-    password = request.form.get("password")
-    if password == RENDER_PASSWORD:
-        session["logged_in"] = True
-        logging.info("用户登录成功")
-        return jsonify({"success": True}), 200
-    logging.warning("用户登录失败")
-    return jsonify({"error": "密码错误"}), 401
-
-# 全局请求拦截器：检查是否已登录
-@app.before_request
-def require_login():
-    if request.endpoint not in ("login", "static") and not session.get("logged_in"):
-        return jsonify({"error": "未登录"}), 401
-
 # 数据库初始化
 def initialize_database():
     try:
@@ -103,6 +86,25 @@ def index():
     except Exception as e:
         logging.error(f"加载首页数据时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
+    
+
+# 登录验证
+@app.route("/login", methods=["POST"])
+def login():
+    password = request.form.get("password")
+    if password == RENDER_PASSWORD:
+        session["logged_in"] = True
+        logging.info("用户登录成功")
+        return jsonify({"success": True}), 200
+    logging.warning("用户登录失败")
+    return jsonify({"error": "密码错误"}), 401
+
+# 全局请求拦截器：检查是否已登录
+@app.before_request
+def require_login():
+    protected_routes = ["/filter", "/search", "/add_chart", "/delete_row", "/download_chart"]
+    if request.endpoint not in ("login", "static") and not session.get("logged_in"):
+        return jsonify({"error": "未登录"}), 401
 
 @app.route("/filter", methods=["POST"])
 def filter_data():
