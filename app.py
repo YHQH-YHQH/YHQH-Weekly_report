@@ -25,7 +25,6 @@ if not RENDER_PASSWORD:
 
 # Flask 应用初始化
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
 
 # 项目目录和文件夹设置
 PROJECT_ROOT = "/tmp"
@@ -64,44 +63,15 @@ initialize_database()
 
 @app.route("/")
 def index():
-    # 如果用户未登录，返回静态 HTML 页面，允许前端触发登录流程
-    if not session.get("logged_in"):
-        return render_template("index.html"), 200
-
-    # 已登录用户的逻辑
-    return render_template("index.html"), 200
-
-
-@app.route("/login", methods=["POST"])
-def login():
-    password = request.form.get("password")
-    if password == RENDER_PASSWORD:
-        session["logged_in"] = True
-        logging.info("用户登录成功")
-        return jsonify({"success": True}), 200
-    logging.warning("用户登录失败")
-    return jsonify({"error": "密码错误"}), 401
-
-# 在受保护路由中验证登录状态
-@app.before_request
-def require_login():
-    open_routes = ["/", "/login", "static"]
-    if request.endpoint not in open_routes and not session.get("logged_in"):
-        # 专门处理 Render 的健康检查请求
-        if request.method == "HEAD" or (request.method == "GET" and "render.com" in request.host):
-            return "", 200
-
-        # 返回空数据而非错误
-        if request.endpoint in ["get_table_data", "get_strategies"]:
-            return jsonify({"columns": [], "data": []}), 200
-
-        # 默认返回未登录错误
-        return jsonify({"error": "未登录"}), 401
+    return render_template("index.html")
 
 
 
 @app.route("/filter", methods=["POST"])
 def filter_data():
+    password = request.form.get("password")
+    if password != RENDER_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
     try:
         strategy = request.form.get("strategy")
         if not strategy:
@@ -129,9 +99,9 @@ def filter_data():
 
 @app.route("/strategies")
 def get_strategies():
-    if not session.get("logged_in"):
-        return jsonify({"error": "未登录"}), 401
-
+    password = request.form.get("password")
+    if password != RENDER_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
     try:
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
@@ -145,8 +115,9 @@ def get_strategies():
 
 @app.route("/table_data")
 def get_table_data():
-    if not session.get("logged_in"):
-        return jsonify({"error": "未登录"}), 401
+    password = request.form.get("password")
+    if password != RENDER_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
 
     try:
         conn = sqlite3.connect(DATABASE_FILE)
@@ -170,6 +141,9 @@ def get_table_data():
 
 @app.route("/search", methods=["POST"])
 def search_data():
+    password = request.form.get("password")
+    if password != RENDER_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
     try:
         keywords = request.form.get("keywords", "").strip()
         if not keywords:
@@ -199,6 +173,9 @@ def search_data():
 
 @app.route("/add_chart", methods=["POST"])
 def add_chart():
+    password = request.form.get("password")
+    if password != RENDER_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
     try:
         product_codes = request.form.getlist("product_codes[]")
         if not product_codes:
@@ -217,6 +194,9 @@ def add_chart():
 
 @app.route("/download_chart/<product_code>")
 def download_chart(product_code):
+    password = request.form.get("password")
+    if password != RENDER_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
     try:
         chart_url = urljoin(BASE_URL, f"{OUTPUT_FOLDER}/{product_code}_chart.html")
         response = requests.get(chart_url, auth=AUTH)
@@ -260,6 +240,9 @@ def delete_row():
         return jsonify({"error": "服务器错误"}), 500
 
 def create_subplots(product_codes):
+    password = request.form.get("password")
+    if password != RENDER_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
     try:
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
