@@ -99,9 +99,6 @@ def filter_data():
 
 @app.route("/strategies")
 def get_strategies():
-    password = request.form.get("password")
-    if password != RENDER_PASSWORD:
-        return jsonify({"error": "密码错误"}), 403
     try:
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
@@ -115,10 +112,6 @@ def get_strategies():
 
 @app.route("/table_data")
 def get_table_data():
-    password = request.form.get("password")
-    if password != RENDER_PASSWORD:
-        return jsonify({"error": "密码错误"}), 403
-
     try:
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
