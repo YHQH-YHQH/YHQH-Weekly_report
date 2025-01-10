@@ -102,8 +102,15 @@ def login():
 # 全局请求拦截器：检查是否已登录
 @app.before_request
 def require_login():
-    protected_routes = ["/filter", "/search", "/add_chart", "/delete_row", "/download_chart"]
-    if request.endpoint not in ("login", "static") and not session.get("logged_in"):
+    # 不需要验证的路径
+    open_routes = ["login", "static", "index"]
+
+    # 当前请求的端点
+    endpoint = request.endpoint
+
+    # 如果是未登录用户且访问受保护路径
+    if endpoint not in open_routes and not session.get("logged_in"):
+        logging.warning(f"未登录用户试图访问受保护路径：{endpoint}")
         return jsonify({"error": "未登录"}), 401
 
 @app.route("/filter", methods=["POST"])
