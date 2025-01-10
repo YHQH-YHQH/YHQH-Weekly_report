@@ -12,7 +12,7 @@
     <h1 class="text-center mb-4">产品净值比较(受保护的数据)</h1>
 
     <!-- 主内容 -->
-    <div id="mainContent" style="display: none;">
+    <div id="mainContent">
         <!-- 筛选 -->
         <div class="row mb-3">
             <div class="col-md-4">
@@ -57,6 +57,7 @@
         const password = prompt("请输入访问密码：");
         let sortColumn = null; // 当前排序列
         let sortOrder = "asc"; // 当前排序顺序
+        $("#mainContent").show();
     
         // 动态加载策略选项
         function loadStrategies() {
