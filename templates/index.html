@@ -61,7 +61,7 @@
     
         // 动态加载策略选项
         function loadStrategies() {
-            $.get("/strategies", {password: password})
+            $.get("/strategies")
                 .done(function (data) {
                     if (data.strategies && data.strategies.length > 0) {
                         const strategySelect = $("#strategySelect");
@@ -81,7 +81,7 @@
     
         // 动态加载表格数据
         function loadTableData() {
-            $.get("/table_data", {password: password})
+            $.get("/table_data")
                 .done(function (data) {
                     if (data.columns && data.columns.length > 0) {
                         renderTable(data.columns, data.data);
