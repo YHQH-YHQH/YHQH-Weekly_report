@@ -73,7 +73,9 @@
 <script>
     $(document).ready(function () {
         let userPassword = null;  // 用于存储用户输入的密码
-
+        let sortColumnIndex = null;  // 当前排序的列索引
+        let sortDirection = "asc";  // 当前排序方向
+    
         // 弹窗获取密码
         function promptForPassword() {
             userPassword = prompt("请输入访问密码：");
@@ -82,7 +84,7 @@
                 promptForPassword();
                 return;
             }
-
+    
             // 验证密码
             $.ajax({
                 url: '/',  // 向后端发送验证请求
@@ -102,25 +104,71 @@
                 }
             });
         }
-
+    
         // 页面加载时调用密码弹窗
         promptForPassword();
-
+    
+        // 点击列名排序功能
+        $('.sortable').click(function () {
+            const columnIndex = $(this).index();  // 获取点击的列索引
+    
+            // 如果点击的列是当前列，则切换排序方向
+            if (sortColumnIndex === columnIndex) {
+                sortDirection = sortDirection === "asc" ? "desc" : "asc";
+            } else {
+                // 如果点击的是新列，重置为升序
+                sortColumnIndex = columnIndex;
+                sortDirection = "asc";
+            }
+    
+            // 获取表格的所有行数据
+            const rows = $('#productTable tbody tr').get();
+    
+            // 使用 Array.sort 进行排序
+            rows.sort(function (a, b) {
+                const cellA = $(a).children('td').eq(columnIndex).text().trim();
+                const cellB = $(b).children('td').eq(columnIndex).text().trim();
+    
+                // 判断内容是否为数字
+                const valueA = isNaN(cellA) ? cellA : parseFloat(cellA);
+                const valueB = isNaN(cellB) ? cellB : parseFloat(cellB);
+    
+                if (sortDirection === "asc") {
+                    return valueA > valueB ? 1 : (valueA < valueB ? -1 : 0);
+                } else {
+                    return valueA < valueB ? 1 : (valueA > valueB ? -1 : 0);
+                }
+            });
+    
+            // 将排序后的行重新附加到表格中
+            $.each(rows, function (index, row) {
+                $('#productTable tbody').append(row);
+            });
+    
+            // 可选：在列头显示升序/降序标志
+            $('.sortable').removeClass('asc desc');  // 移除其他列的排序状态
+            $(this).addClass(sortDirection);  // 添加当前列的排序状态
+        });
+    
         // 筛选逻辑
         $('#strategySelect').change(function () {
             const selectedStrategy = $(this).val();
-            $.post('/filter', {strategy: selectedStrategy}, function (data) {
-                if (Array.isArray(data)) {
-                    updateTable(data);  // 更新表格
-                } else {
-                    alert('筛选失败：无效的响应数据');
-                }
-            }).fail(function (xhr, status, error) {
-                console.error('筛选请求失败:', status, error);
-                alert('筛选失败：网络或服务器错误，请稍后重试');
-            });
+            if (selectedStrategy) {
+                $.post('/filter', {strategy: selectedStrategy}, function (data) {
+                    if (Array.isArray(data)) {
+                        updateTable(data);  // 更新表格
+                    } else {
+                        alert('筛选失败：无效的响应数据');
+                    }
+                }).fail(function (xhr, status, error) {
+                    console.error('筛选请求失败:', status, error);
+                    alert('筛选失败：网络或服务器错误，请稍后重试');
+                });
+            } else {
+                alert('请选择一个产品策略');
+            }
         });
-
+    
         // 搜索并展示
         $('#searchDisplayButton').click(function () {
             const keywords = $('#searchInput').val();
@@ -128,7 +176,7 @@
                 alert('请输入搜索关键字');
                 return;
             }
-
+    
             $.post('/search', {keywords: keywords}, function (data) {
                 if (Array.isArray(data)) {
                     updateTable(data);  // 清空表格并展示搜索结果
@@ -140,7 +188,7 @@
                 alert('搜索失败：网络或服务器错误，请稍后重试');
             });
         });
-
+    
         // 搜索并添加
         $('#searchAddButton').click(function () {
             const keywords = $('#searchInput').val();
@@ -148,7 +196,7 @@
                 alert('请输入搜索关键字');
                 return;
             }
-
+    
             $.post('/search', {keywords: keywords}, function (data) {
                 if (Array.isArray(data)) {
                     const tableBody = $('#productTable tbody');
@@ -157,7 +205,7 @@
                         const productCode = $(this).find('td:first').text();
                         existingProductCodes.add(productCode);
                     });
-
+    
                     // 确保不重复添加已存在的数据
                     data.forEach(row => {
                         if (!existingProductCodes.has(row['产品代码'])) {
@@ -182,7 +230,7 @@
                 alert('搜索失败：网络或服务器错误，请稍后重试');
             });
         });
-
+    
         // 删除逻辑
         $(document).on('click', '.delete-row', function () {
             const $button = $(this);
@@ -193,47 +241,23 @@
                 alert('已从当前视图移除');
             }
         });
-
+    
         // 下载图表
         $(document).on('click', '.download-chart', function () {
             const productCode = $(this).data('code');
             window.location.href = `/download_chart/${productCode}`;
         });
-
-        // 生成合并图表
-        $('#generateChartButton').click(function () {
-            const productCodes = [];
-            $('#productTable tbody tr').each(function () {
-                const productCode = $(this).find('td:first').text();
-                productCodes.push(productCode);
-            });
-
-            if (productCodes.length > 0) {
-                alert('合并图表请求成功'); // 前端提示
-                $.post('/add_chart', {product_codes: productCodes}, function (data) {
-                    if (data.success && data.chart_path) {
-                        window.open(data.chart_path, '_blank');
-                    } else {
-                        alert('生成图表失败：' + (data.error || '未知错误'));
-                    }
-                }).fail(function (xhr, status, error) {
-                    alert('生成图表失败：网络或服务器错误，请稍后再试');
-                });
-            } else {
-                alert('没有可用于生成图表的数据');
-            }
-        });
-
+    
         // 更新表格内容
         function updateTable(data) {
             const tableBody = $('#productTable tbody');
             tableBody.empty();
-
+    
             if (data.length === 0) {
                 tableBody.append('<tr><td colspan="13" class="text-center">没有符合条件的产品</td></tr>');
                 return;
             }
-
+    
             data.forEach(row => {
                 let tableRow = '<tr>';
                 for (const key in row) {
