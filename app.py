@@ -10,7 +10,7 @@ import requests
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
-# 从环境变量中获取坚果云 WebDAV 配置信息
+# 从环境变量中获取坚果云 WebDAV 配置信息和密码
 BASE_URL = os.getenv("BASE_URL", "https://dav.jianguoyun.com/dav/")
 USERNAME = os.getenv("USERNAME", "User")
 PASSWORD = os.getenv("PASSWORD", "Pwd")
@@ -29,17 +29,6 @@ result_file = "产品净值数据/WeeklyReport_各项指标.xlsx"
 
 # 初始化 Flask 应用
 app = Flask(__name__)
-
-# 全局请求拦截器：验证密码
-@app.before_request
-def require_password():
-    # 从请求中获取用户输入的密码
-    user_password = request.args.get("password")  # 支持 GET 请求通过 URL 参数传递密码
-    if not user_password:
-        return jsonify({"error": "需要密码访问，请在请求中提供密码"}), 401
-
-    if user_password != RENDER_PASSWORD:
-        return jsonify({"error": "密码错误，访问被拒绝"}), 403
 
 # 将 Excel 数据加载到 SQLite 数据库
 def initialize_database():
@@ -65,6 +54,21 @@ def initialize_database():
 
 # 初始化数据库
 initialize_database()
+
+# 全局请求拦截器：验证密码，但跳过根路径 "/"
+@app.before_request
+def require_password():
+    # 跳过根路径和静态资源的密码验证
+    if request.path in ["/", "/static"] or request.path.startswith("/static/"):
+        return
+
+    # 从请求中获取用户输入的密码
+    user_password = request.args.get("password") or request.form.get("password")
+    if not user_password:
+        return jsonify({"error": "需要密码访问，请在请求中提供密码"}), 401
+
+    if user_password != RENDER_PASSWORD:
+        return jsonify({"error": "密码错误，访问被拒绝"}), 403
 
 @app.route("/")
 def index():
@@ -184,7 +188,6 @@ def download_chart(product_code):
         print(f"下载图表时出错: {e}")
         return jsonify({"error": "Server error"}), 500
 
-
 @app.route("/output_charts/<path:filename>")
 def serve_temp_file(filename):
     file_path = os.path.join(OUTPUT_FOLDER, filename)
@@ -216,7 +219,6 @@ def delete_row():
     conn.close()
 
     return jsonify({"success": True, "product_code": product_code})
-
 
 def create_subplots(product_codes):
     global OUTPUT_FOLDER
@@ -287,7 +289,6 @@ def create_subplots(product_codes):
     except Exception as e:
         print(f"生成子图时出现异常: {e}")
         return None
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
