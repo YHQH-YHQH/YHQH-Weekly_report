@@ -209,13 +209,13 @@ def add_chart():
         logging.error(f"生成合并图表时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
 
-@app.route("/download_chart/<product_code>")
+@app.route("/download_chart/<product_code>", methods=["POST"])
 def download_chart(product_code):
     password = request.form.get("password")
     if password != RENDER_PASSWORD:
         return jsonify({"error": "密码错误"}), 403
     try:
-        chart_url = urljoin(BASE_URL, f"{OUTPUT_FOLDER}/{product_code}_chart.html")
+        chart_url = urljoin(BASE_URL, f"产品净值数据/output_charts/{product_code}_chart.html")
         response = requests.get(chart_url, auth=AUTH)
         if response.status_code == 200:
             local_path = os.path.join(OUTPUT_FOLDER, f"{product_code}_chart.html")
@@ -226,6 +226,7 @@ def download_chart(product_code):
     except Exception as e:
         logging.error(f"下载图表时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
+
 
 @app.route("/output_charts/<path:filename>")
 def serve_temp_file(filename):
