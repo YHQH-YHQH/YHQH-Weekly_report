@@ -55,11 +55,18 @@
 <script>
     $(document).ready(function () {
         const password = prompt("请输入访问密码：");
+        console.log("Password entered:", password);
+        // 验证密码是否为空
+        if (!password) {
+            alert("密码未提供，无法加载数据！");
+            return; // 停止执行后续逻辑
+        }
         let currentSortOrder = []; // 当前排序顺序的列 [{ column: "列名", order: "asc" }]
         $("#mainContent").show();
     
         // 动态加载策略选项
         function loadStrategies() {
+            console.log("Strategies is called, returned:", data);
             $.post("/strategies", { password: password })  // 使用 POST 发送密码
                 .done(function (data) {
                     if (data.strategies && data.strategies.length > 0) {
