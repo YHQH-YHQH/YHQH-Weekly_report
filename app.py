@@ -98,9 +98,14 @@ def filter_data():
         logging.error(f"筛选数据时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
 
-@app.route("/strategies")
+@app.route("/strategies", methods=["POST"])
 def get_strategies():
     try:
+        # 获取前端传递的密码
+        password = request.form.get("password")
+        if password != RENDER_PASSWORD:  # 验证密码
+            return jsonify({"error": "密码错误"}), 403
+
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
         cursor.execute("SELECT DISTINCT 产品策略 FROM products")
@@ -111,9 +116,15 @@ def get_strategies():
         logging.error(f"获取策略列表时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
 
-@app.route("/table_data")
+
+@app.route("/table_data", methods=["POST"])
 def get_table_data():
     try:
+        # 获取前端传递的密码
+        password = request.form.get("password")
+        if password != RENDER_PASSWORD:  # 验证密码
+            return jsonify({"error": "密码错误"}), 403
+
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
 
@@ -126,8 +137,10 @@ def get_table_data():
         """)
         data = cursor.fetchall()
         conn.close()
-        return jsonify({"columns": columns,
-                        "data": [dict(zip(columns, row)) for row in data]})
+        return jsonify({
+            "columns": columns,
+            "data": [dict(zip(columns, row)) for row in data]
+        })
     except Exception as e:
         logging.error(f"获取表格数据时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
