@@ -216,9 +216,12 @@ def download_chart(product_code):
         return jsonify({"error": "密码错误"}), 403
     try:
         chart_url = urljoin(BASE_URL, f"产品净值数据/output_charts/{product_code}_chart.html")
+        logging.info(f"Fetching chart from: {chart_url}")
         response = requests.get(chart_url, auth=AUTH)
+        logging.info(f"WebDAV Response: {response.status_code}")
         if response.status_code == 200:
             local_path = os.path.join(OUTPUT_FOLDER, f"{product_code}_chart.html")
+            logging.info(f"Saving chart to local path: {local_path}")
             with open(local_path, "wb") as file:
                 file.write(response.content)
             return send_file(local_path, as_attachment=True, download_name=f"{product_code}_chart.html")
