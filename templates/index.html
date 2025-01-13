@@ -193,9 +193,10 @@
                     console.log("Search response:", data); // 打印返回数据
         
                     // 检查返回数据格式
-                    if (data.data && Array.isArray(data.data)) {
+                    if (data.columns && Array.isArray(data.columns) && data.data && Array.isArray(data.data)) {
                         const tableBody = $("#productTable tbody");
                         const existingProductCodes = new Set();
+        
                         // 获取当前表格中所有产品代码
                         $("#productTable tbody tr").each(function () {
                             const productCode = $(this).find("td:first").text();
@@ -206,8 +207,9 @@
                         data.data.forEach(row => {
                             if (!existingProductCodes.has(row["产品代码"])) {
                                 let tableRow = "<tr>";
-                                Object.keys(row).forEach(key => {
-                                    tableRow += `<td>${row[key] || ""}</td>`;
+                                // 按列顺序渲染数据
+                                data.columns.forEach(column => {
+                                    tableRow += `<td>${row[column] || ""}</td>`;
                                 });
                                 tableRow += `
                                     <td>
@@ -226,6 +228,7 @@
                     alert("搜索失败！");
                 });
         });
+
 
 
         // 删除数据
