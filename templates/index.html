@@ -46,7 +46,7 @@
         <!-- 图表生成 -->
         <div class="row mt-4">
             <div class="col-md-12 text-center">
-                <button id="generateChartButton" class="btn btn-success">生成合并图表</button>
+                <button id="generateChartButton" class="btn btn-success">生成并下载合并图表</button>
             </div>
         </div>
     </div>
@@ -342,32 +342,29 @@
                 });
         });
 
-        // 点击“生成合并图表”按钮
+        // 点击“生成并下载合并图表”按钮
         $("#generateChartButton").click(function () {
             const productCodes = [];
             $("#productTable tbody tr").each(function () {
                 const productCode = $(this).find("td:first").text();
                 productCodes.push(productCode);
             });
-
+        
             if (productCodes.length === 0) {
                 alert("没有产品可生成图表！");
                 return;
             }
-
-            $.post("/add_chart", {product_codes: productCodes, password: password})
-                .done(function (data) {
-                    if (data.success && data.chart_path) {
-                        alert("合并图表生成成功！");
-                        window.open(data.chart_path, "_blank");
-                    } else {
-                        alert("生成合并图表失败！");
-                    }
+        
+            // 发送请求生成并下载图表
+            $.post("/add_chart", { product_codes: productCodes, password: password })
+                .done(function () {
+                    alert("图表已生成并开始下载！");
                 })
                 .fail(function () {
-                    alert("生成合并图表请求失败！");
+                    alert("生成合并图表失败！");
                 });
         });
+
     });
 </script>
 </body>
