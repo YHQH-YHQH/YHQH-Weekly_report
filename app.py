@@ -246,8 +246,14 @@ def delete_row():
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
 
+        # 执行删除操作
         cursor.execute("DELETE FROM products WHERE 产品代码 = ?", (product_code,))
         conn.commit()
+
+        # 检查删除操作是否成功
+        if cursor.rowcount == 0:
+            return jsonify({"error": "未找到指定的产品"}), 404
+
         conn.close()
 
         logging.info(f"删除产品成功：{product_code}")
@@ -255,6 +261,7 @@ def delete_row():
     except Exception as e:
         logging.error(f"删除产品时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
+
 
 def create_subplots(product_codes):
     password = request.form.get("password")
