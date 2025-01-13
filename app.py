@@ -92,7 +92,8 @@ def filter_data():
         columns = [row[1] for row in cursor.fetchall()]
 
         conn.close()
-        return jsonify({"columns": columns, "data": data})
+        return jsonify({"columns": columns,
+                        "data": [dict(zip(columns, row)) for row in data]})
     except Exception as e:
         logging.error(f"筛选数据时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
@@ -124,12 +125,9 @@ def get_table_data():
             ORDER BY 产品策略 ASC, 年化收益率 DESC, 本周收益率 DESC
         """)
         data = cursor.fetchall()
-        
-        # 添加调试日志
-        logging.info(f"Table Data API - Columns: {columns}, Data: {data}")
-
         conn.close()
-        return jsonify({"columns": columns, "data": data})
+        return jsonify({"columns": columns,
+                        "data": [dict(zip(columns, row)) for row in data]})
     except Exception as e:
         logging.error(f"获取表格数据时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
@@ -162,7 +160,8 @@ def search_data():
         columns = [row[1] for row in cursor.fetchall()]
 
         conn.close()
-        return jsonify({"columns": columns, "data": data})
+        return jsonify({"columns": columns,
+                        "data": [dict(zip(columns, row)) for row in data]})
     except Exception as e:
         logging.error(f"搜索数据时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
