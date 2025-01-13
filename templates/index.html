@@ -61,7 +61,7 @@
     
         // 动态加载策略选项
         function loadStrategies() {
-            $.get("/strategies")
+            $.post("/strategies", { password: password })  // 使用 POST 发送密码
                 .done(function (data) {
                     if (data.strategies && data.strategies.length > 0) {
                         const strategySelect = $("#strategySelect");
@@ -70,8 +70,9 @@
                         data.strategies.forEach(strategy => {
                             strategySelect.append(`<option value="${strategy}">${strategy}</option>`);
                         });
-                    } else {
-                        const password = prompt("请输入访问密码："); // 如果返回空数据，触发登录
+                    } else if (data.error) {
+                        alert(data.error);  // 如果后端返回密码错误
+                        location.reload();  // 重新加载页面以重新登录
                     }
                 })
                 .fail(function () {
@@ -81,12 +82,13 @@
     
         // 动态加载表格数据
         function loadTableData() {
-            $.get("/table_data")
+            $.post("/table_data", { password: password })  // 使用 POST 发送密码
                 .done(function (data) {
                     if (data.columns && data.columns.length > 0) {
                         renderTable(data.columns, data.data);
-                    } else {
-                        const password = prompt("请输入访问密码："); // 如果返回空数据，触发登录
+                    } else if (data.error) {
+                        alert(data.error);  // 如果后端返回密码错误
+                        location.reload();  // 重新加载页面以重新登录
                     }
                 })
                 .fail(function () {
