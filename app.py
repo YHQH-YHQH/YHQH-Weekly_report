@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_file, session
 import os
+import time
 import sqlite3
 import pandas as pd
 from io import BytesIO
@@ -19,6 +20,7 @@ USERNAME = os.getenv("USERNAME", "User")
 PASSWORD = os.getenv("PASSWORD", "Pwd")
 AUTH = HTTPBasicAuth(USERNAME, PASSWORD)
 RENDER_PASSWORD = os.getenv("USER_PASSWORD")
+MAX_TMP_SPACE_MB = 500
 
 if not RENDER_PASSWORD:
     raise ValueError("未设置 USER_PASSWORD 环境变量，请在 Render 中添加密码。")
@@ -193,18 +195,54 @@ def add_chart():
     password = request.form.get("password")
     if password != RENDER_PASSWORD:
         return jsonify({"error": "密码错误"}), 403
+
     try:
+        # 获取产品代码
         product_codes = request.form.getlist("product_codes[]")
         if not product_codes:
             return jsonify({"error": "无效的产品代码"}), 400
 
-        chart_path = create_subplots(product_codes)
-        if not chart_path:
-            logging.warning("合并图表生成失败")
-            return jsonify({"error": "生成图表失败"}), 500
+        # 动态生成文件名
+        if len(product_codes) > 3:
+            chart_name = f"{'_'.join(product_codes[:3])}_等_合并.html"
+        else:
+            chart_name = f"{'_'.join(product_codes)}_合并.html"
 
-        logging.info("合并图表生成成功")
-        return jsonify({"success": True, "chart_path": chart_path})
+        # 检查单产品情况
+        if len(product_codes) == 1:
+            single_chart_url = urljoin(BASE_URL, f"产品净值数据/output_charts/{product_codes[0]}_chart.html")
+            response = requests.get(single_chart_url, auth=AUTH)
+            if response.status_code == 200:
+                local_path = os.path.join(PROJECT_ROOT, f"{product_codes[0]}_chart.html")
+                with open(local_path, "wb") as file:
+                    file.write(response.content)
+                return send_file(local_path, as_attachment=True, download_name=f"{product_codes[0]}_chart.html")
+            else:
+                return jsonify({"error": f"图表 {product_codes[0]} 未找到"}), 404
+
+        # 检查是否已有对应合并图表
+        chart_path = os.path.join(PROJECT_ROOT, chart_name)
+        if os.path.exists(chart_path):
+            return send_file(chart_path, as_attachment=True, download_name=chart_name)
+
+        # 如果不存在，尝试生成合并图表
+        chart_path = create_subplots(product_codes, chart_name)
+        if not chart_path:
+            logging.warning("合并图表生成失败，可能是空间不足")
+
+            # 检查是否空间不足导致的失败
+            if not has_sufficient_tmp_space():
+                logging.info("清空 /tmp 文件夹，释放空间")
+                clear_tmp_folder()
+                # 再次尝试生成图表
+                chart_path = create_subplots(product_codes, chart_name)
+                if not chart_path:
+                    return jsonify({"error": "生成合并图表失败"}), 500
+            else:
+                return jsonify({"error": "生成合并图表失败"}), 500
+
+        return send_file(chart_path, as_attachment=True, download_name=chart_name)
+
     except Exception as e:
         logging.error(f"生成合并图表时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
@@ -267,17 +305,13 @@ def delete_row():
         return jsonify({"error": "服务器错误"}), 500
 
 
-def create_subplots(product_codes):
-    password = request.form.get("password")
-    if password != RENDER_PASSWORD:
-        return jsonify({"error": "密码错误"}), 403
+def create_subplots(product_codes, chart_name):
     try:
-        conn = sqlite3.connect(DATABASE_FILE)
+        conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "data.db"))
         cursor = conn.cursor()
 
         cursor.execute("SELECT 产品代码, 产品名称 FROM products")
         product_mapping = dict(cursor.fetchall())
-
         conn.close()
 
         all_dates = []
@@ -311,13 +345,30 @@ def create_subplots(product_codes):
                 y_data = product_data[product_code]["y"]
                 fig.add_trace(go.Scatter(x=x_data, y=y_data, name=product_code), row=idx + 1, col=1)
 
-        chart_path = os.path.join(OUTPUT_FOLDER, "merged_chart.html")
+        chart_path = os.path.join(PROJECT_ROOT, chart_name)
         fig.write_html(chart_path)
         logging.info(f"合并图表保存到：{chart_path}")
         return chart_path
+
     except Exception as e:
         logging.error(f"生成合并图表时出现错误：{e}")
         return None
+
+
+def has_sufficient_tmp_space():
+    total, used, free = shutil.disk_usage(PROJECT_ROOT)
+    free_mb = free // (1024 * 1024)
+    return free_mb >= MAX_TMP_SPACE_MB * 0.1  # 剩余至少 10% 才认为足够
+
+
+def clear_tmp_folder():
+    for filename in os.listdir(PROJECT_ROOT):
+        filepath = os.path.join(PROJECT_ROOT, filename)
+        try:
+            if os.path.isfile(filepath):
+                os.unlink(filepath)
+        except Exception as e:
+            logging.error(f"清空 /tmp 文件夹时删除文件 {filename} 失败：{e}")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
