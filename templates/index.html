@@ -207,17 +207,32 @@
         // 删除数据
         $(document).on("click", ".delete-row", function () {
             const productCode = $(this).data("code");
+        
             if (confirm("确定要删除该产品吗？")) {
-                $.post("/delete_row", {product_code: productCode})
-                    .done(function () {
-                        alert("删除成功！");
-                        loadTableData();
+                $.post("/delete_row", { product_code: productCode })
+                    .done(function (response) {
+                        if (response.success) {
+                            alert("删除成功！");
+        
+                            // 检查表格中是否还有其他行
+                            const rows = $("#productTable tbody tr");
+                            if (rows.length > 1) {
+                                // 只删除当前行
+                                $(`button[data-code="${productCode}"]`).closest("tr").remove();
+                            } else {
+                                // 如果是最后一行，刷新表格并显示所有产品
+                                loadTableData();
+                            }
+                        } else {
+                            alert("删除失败！");
+                        }
                     })
                     .fail(function () {
                         alert("删除失败！");
                     });
             }
         });
+
 
         // 下载图表
         $(document).on("click", ".download-chart", function () {
