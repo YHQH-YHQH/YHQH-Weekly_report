@@ -72,20 +72,28 @@ def filter_data():
     password = request.form.get("password")
     if password != RENDER_PASSWORD:
         return jsonify({"error": "密码错误"}), 403
+
     try:
         strategy = request.form.get("strategy")
-        if not strategy:
-            return jsonify({"error": "无效的策略"}), 400
 
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
 
-        query = """
-            SELECT * FROM products
-            WHERE 产品策略 = ?
-            ORDER BY 年化收益率 DESC, 本周收益率 DESC
-        """
-        cursor.execute(query, (strategy,))
+        # 判断是否需要筛选策略
+        if strategy:
+            query = """
+                SELECT * FROM products
+                WHERE 产品策略 = ?
+                ORDER BY 年化收益率 DESC, 本周收益率 DESC
+            """
+            cursor.execute(query, (strategy,))
+        else:
+            query = """
+                SELECT * FROM products
+                ORDER BY 产品策略 ASC, 年化收益率 DESC, 本周收益率 DESC
+            """
+            cursor.execute(query)
+
         data = cursor.fetchall()
 
         cursor.execute("PRAGMA table_info(products)")
@@ -97,6 +105,7 @@ def filter_data():
     except Exception as e:
         logging.error(f"筛选数据时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
+
 
 @app.route("/strategies", methods=["POST"])
 def get_strategies():
