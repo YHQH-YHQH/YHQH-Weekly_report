@@ -55,8 +55,7 @@
 <script>
     $(document).ready(function () {
         const password = prompt("请输入访问密码：");
-        let sortColumn = null; // 当前排序列
-        let sortOrder = "asc"; // 当前排序顺序
+        let currentSortOrder = []; // 当前排序顺序的列 [{ column: "列名", order: "asc" }]
         $("#mainContent").show();
     
         // 动态加载策略选项
@@ -101,35 +100,56 @@
     
         // 渲染表格数据
         function renderTable(columns, data) {
-            console.log("Columns received:", columns);
-            console.log("Data received:", data);
-            
             const tableHead = $("#productTable thead tr");
             const tableBody = $("#productTable tbody");
             tableHead.empty();
             tableBody.empty();
-    
+        
             // 渲染表头
             columns.forEach(column => {
-                tableHead.append(`<th class="sortable" data-column="${column}">${column}</th>`);
+                tableHead.append(`<th>${column}</th>`);
             });
             tableHead.append("<th>操作</th>");
-    
+        
             // 渲染数据
             data.forEach(row => {
                 let tableRow = "<tr>";
                 columns.forEach(column => {
-                    tableRow += `<td>${row[column] || ""}</td>`;
+                    const cellValue = row[column] || "";
+        
+                    // 特殊处理需要颜色的列
+                    if (
+                        column === "年化收益率" ||
+                        column === "本周收益率" ||
+                        column === "上周收益率" ||
+                        column === "本年收益"
+                    ) {
+                        // 解析数值并判断正负
+                        const numericValue = parseFloat(cellValue.replace(/%/g, "")); // 去掉百分号
+                        if (!isNaN(numericValue)) {
+                            const color = numericValue > 0 ? "red" : numericValue < 0 ? "green" : "black";
+                            tableRow += `<td style="color: ${color};">${cellValue}</td>`;
+                        } else {
+                            // 非数值情况（如空值）
+                            tableRow += `<td>${cellValue}</td>`;
+                        }
+                    } else {
+                        // 普通列直接添加
+                        tableRow += `<td>${cellValue}</td>`;
+                    }
                 });
+        
+                // 添加操作按钮
                 tableRow += `
                     <td>
-                        <button class="btn btn-danger btn-sm delete-row" data-code="${row['产品代码']}">删除</button>
-                        <button class="btn btn-info btn-sm download-chart" data-code="${row['产品代码']}">下载图表</button>
+                        <button class="btn btn-danger btn-sm delete-row" data-code="${row["产品代码"]}">删除</button>
+                        <button class="btn btn-info btn-sm download-chart" data-code="${row["产品代码"]}">下载图表</button>
                     </td>`;
                 tableRow += "</tr>";
                 tableBody.append(tableRow);
             });
         }
+
 
         // 筛选数据
         $("#strategySelect").change(function () {
@@ -167,10 +187,13 @@
                 alert("请输入搜索关键字！");
                 return;
             }
-
-            $.post("/search", {keywords: keywords, password: password})
+        
+            $.post("/search", { keywords: keywords, password: password })
                 .done(function (data) {
-                    if (Array.isArray(data)) {
+                    console.log("Search response:", data); // 打印返回数据
+        
+                    // 检查返回数据格式
+                    if (data.data && Array.isArray(data.data)) {
                         const tableBody = $("#productTable tbody");
                         const existingProductCodes = new Set();
                         // 获取当前表格中所有产品代码
@@ -178,9 +201,9 @@
                             const productCode = $(this).find("td:first").text();
                             existingProductCodes.add(productCode);
                         });
-
+        
                         // 确保不重复添加已存在的数据
-                        data.forEach(row => {
+                        data.data.forEach(row => {
                             if (!existingProductCodes.has(row["产品代码"])) {
                                 let tableRow = "<tr>";
                                 Object.keys(row).forEach(key => {
@@ -203,6 +226,7 @@
                     alert("搜索失败！");
                 });
         });
+
 
         // 删除数据
         $(document).on("click", ".delete-row", function () {
@@ -233,7 +257,67 @@
             }
         });
 
-
+        // 初始化表格头部点击事件
+        $("#productTable thead").on("click", "th", function () {
+            const column = $(this).text(); // 获取列名
+            if (!column) return; // 忽略空列点击
+    
+            // 更新当前排序逻辑
+            updateSortOrder(column);
+    
+            // 获取表格行数据
+            const rows = $("#productTable tbody tr").toArray();
+    
+            // 按排序规则排序
+            rows.sort((a, b) => {
+                for (let { column, order } of currentSortOrder) {
+                    const colIndex = $("#productTable thead th").filter((_, th) => $(th).text() === column).index();
+                    const valA = $(a).find("td").eq(colIndex).text().trim();
+                    const valB = $(b).find("td").eq(colIndex).text().trim();
+    
+                    // 按数值或字符串排序
+                    let comparison = compareValues(valA, valB, order);
+                    if (comparison !== 0) return comparison; // 如果不相等，停止比较
+                }
+                return 0; // 如果所有列都相等
+            });
+    
+            // 重新渲染排序后的行
+            $("#productTable tbody").empty().append(rows);
+        });
+    
+        // 更新排序顺序逻辑
+        function updateSortOrder(column) {
+            const existingIndex = currentSortOrder.findIndex((rule) => rule.column === column);
+    
+            if (existingIndex >= 0) {
+                // 如果当前列已经存在排序规则，则切换排序顺序
+                currentSortOrder[existingIndex].order =
+                    currentSortOrder[existingIndex].order === "asc" ? "desc" : "asc";
+            } else {
+                // 如果当前列不存在排序规则，添加为降序
+                currentSortOrder.push({ column: column, order: "asc" });
+            }
+    
+            // 确保最新点击的列排在优先级最前
+            const newRule = currentSortOrder.splice(existingIndex, 1)[0]; // 删除旧规则
+            currentSortOrder.unshift(newRule); // 将新规则放到最前
+        }
+    
+        // 比较两个值（支持字符串和数值比较）
+        function compareValues(a, b, order) {
+            const numA = parseFloat(a.replace(/,/g, "")); // 转为数值（支持逗号格式）
+            const numB = parseFloat(b.replace(/,/g, ""));
+            const isNumeric = !isNaN(numA) && !isNaN(numB);
+    
+            if (isNumeric) {
+                return order === "asc" ? numA - numB : numB - numA; // 数值比较
+            } else {
+                return order === "asc" ? a.localeCompare(b) : b.localeCompare(a); // 字符串比较
+            }
+        }
+    });
+    
         // 下载图表
         $(document).on("click", ".download-chart", function () {
             const productCode = $(this).data("code");
