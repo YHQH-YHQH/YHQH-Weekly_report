@@ -99,6 +99,9 @@
     
         // 渲染表格数据
         function renderTable(columns, data) {
+            console.log("Columns received:", columns);
+            console.log("Data received:", data);
+            
             const tableHead = $("#productTable thead tr");
             const tableBody = $("#productTable tbody");
             tableHead.empty();
