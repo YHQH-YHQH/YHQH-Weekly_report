@@ -124,6 +124,9 @@ def get_table_data():
             ORDER BY 产品策略 ASC, 年化收益率 DESC, 本周收益率 DESC
         """)
         data = cursor.fetchall()
+        
+        # 添加调试日志
+        logging.info(f"Table Data API - Columns: {columns}, Data: {data}")
 
         conn.close()
         return jsonify({"columns": columns, "data": data})
