@@ -355,13 +355,15 @@
                 return;
             }
         
-            // 构造 URL
-            const params = new URLSearchParams({
-                "product_codes[]": productCodes,
-                password: password
-            });
+            // 构造 URL 参数
+            const params = new URLSearchParams();
+            productCodes.forEach(code => params.append("product_codes[]", code)); // 确保数组参数正确格式
+            params.append("password", password);
+        
+            // 跳转下载地址
             window.location.href = `/add_chart?${params.toString()}`;
         });
+
 
     });
 </script>
