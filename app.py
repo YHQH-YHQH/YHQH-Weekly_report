@@ -223,7 +223,7 @@ def add_chart():
                 return jsonify({"error": f"图表 {product_codes[0]} 未找到"}), 404
 
         # 检查是否已有对应合并图表
-        chart_path = os.path.join(PROJECT_ROOT, chart_name)
+        chart_path = os.path.join(OUTPUT_FOLDER, chart_name)
         if os.path.exists(chart_path):
             return send_file(chart_path, as_attachment=True, download_name=chart_name)
 
@@ -347,7 +347,7 @@ def create_subplots(product_codes, chart_name):
                 y_data = product_data[product_code]["y"]
                 fig.add_trace(go.Scatter(x=x_data, y=y_data, name=product_code), row=idx + 1, col=1)
 
-        chart_path = os.path.join(PROJECT_ROOT, chart_name)
+        chart_path = os.path.join(OUTPUT_FOLDER, chart_name)
         fig.write_html(chart_path)
         logging.info(f"合并图表保存到：{chart_path}")
         return chart_path
