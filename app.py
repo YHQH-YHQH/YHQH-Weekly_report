@@ -67,7 +67,9 @@ initialize_database()
 def index():
     return render_template("index.html")
 
-
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204  # 返回一个空响应，避免 404 错误
 
 @app.route("/filter", methods=["POST"])
 def filter_data():
