@@ -355,13 +355,28 @@
                 return;
             }
         
-            // 构造 URL 参数
-            const params = new URLSearchParams();
-            productCodes.forEach(code => params.append("product_codes[]", code)); // 确保数组参数正确格式
-            params.append("password", password);
+            // 发送请求生成并下载图表
+            $.post("/add_chart", { product_codes: productCodes, password: password })
+                .done(function () {
+                    // 根据产品代码生成文件名
+                    let chartName;
+                    if (productCodes.length > 3) {
+                        chartName = `${productCodes.slice(0, 3).join("_")}_等_合并.html`;
+                    } else {
+                        chartName = `${productCodes.join("_")}_合并.html`;
+                    }
         
-            // 跳转下载地址
-            window.location.href = `/add_chart?${params.toString()}`;
+                    // 创建隐藏链接并触发下载
+                    const link = document.createElement("a");
+                    link.href = `/output_charts/${chartName}`; // 文件路径
+                    link.download = chartName; // 文件名
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                })
+                .fail(function () {
+                    alert("生成合并图表失败！");
+                });
         });
 
 
