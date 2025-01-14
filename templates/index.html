@@ -355,14 +355,12 @@
                 return;
             }
         
-            // 发送请求生成并下载图表
-            $.post("/add_chart", { product_codes: productCodes, password: password })
-                .done(function () {
-                    alert("图表已生成并开始下载！");
-                })
-                .fail(function () {
-                    alert("生成合并图表失败！");
-                });
+            // 构造 URL
+            const params = new URLSearchParams({
+                "product_codes[]": productCodes,
+                password: password
+            });
+            window.location.href = `/add_chart?${params.toString()}`;
         });
 
     });
