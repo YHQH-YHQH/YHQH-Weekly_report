@@ -192,14 +192,9 @@ def search_data():
         logging.error(f"搜索数据时出现错误：{e}")
         return jsonify({"error": "服务器错误"}), 500
 
-@app.route("/add_chart", methods=["GET", "POST"])
+@app.route("/add_chart", methods=["POST"])
 def add_chart():
-    if request.method == "POST":
-        product_codes = request.form.getlist("product_codes[]")
-        password = request.form.get("password")
-    else:  # GET 方法
-        product_codes = request.args.getlist("product_codes[]")
-        password = request.args.get("password")
+    password = request.form.get("password")
     if password != RENDER_PASSWORD:
         return jsonify({"error": "密码错误"}), 403
 
