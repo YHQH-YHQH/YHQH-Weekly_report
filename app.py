@@ -10,6 +10,7 @@ import requests
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import logging
+import shutil  # 需要在has_sufficient_tmp_space里使用
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -50,8 +51,18 @@ def initialize_database():
             logging.info("Excel 文件下载成功")
 
         # 加载数据到 SQLite 数据库
-        df = pd.read_excel(os.path.join(PROJECT_ROOT, "WeeklyReport_各项指标.xlsx"))
+        # --- 改动1：指定新增列“同策略表现”和“近8周排名”读取为字符串类型 ---
+        # 其余列按默认推断，或可根据需求自行指定
+        dtype_map = {
+            "同策略表现": str,
+            "近8周排名": str
+        }
+        df = pd.read_excel(os.path.join(PROJECT_ROOT, "WeeklyReport_各项指标.xlsx"),
+                           dtype=dtype_map)
         cursor.execute("DROP TABLE IF EXISTS products")
+        # 如果希望在数据库中强制使用TEXT类型，可使用类似：
+        # df.to_sql("products", conn, index=False, if_exists="replace", dtype={"同策略表现": "TEXT", "近8周排名": "TEXT"})
+        # 这里演示只使用默认映射也可以
         df.to_sql("products", conn, index=False, if_exists="replace")
         logging.info("数据已加载到 SQLite 数据库")
 
@@ -199,7 +210,6 @@ def add_chart():
         return jsonify({"error": "密码错误"}), 403
 
     try:
-        # 获取产品代码
         product_codes = request.form.getlist("product_codes[]")
         if not product_codes:
             return jsonify({"error": "无效的产品代码"}), 400
@@ -210,7 +220,7 @@ def add_chart():
         else:
             chart_name = f"{'_'.join(product_codes)}_合并.html"
 
-        # 检查单产品情况
+        # 如果只选择了一个产品，就直接返回单图
         if len(product_codes) == 1:
             single_chart_url = urljoin(BASE_URL, f"产品净值数据/output_charts/{product_codes[0]}_chart.html")
             response = requests.get(single_chart_url, auth=AUTH)
@@ -222,8 +232,8 @@ def add_chart():
             else:
                 return jsonify({"error": f"图表 {product_codes[0]} 未找到"}), 404
 
-        # 检查是否已有对应合并图表
         chart_path = os.path.join(OUTPUT_FOLDER, chart_name)
+        # 如果对应的合并图已存在，直接返回
         if os.path.exists(chart_path):
             return send_file(chart_path, as_attachment=True, download_name=chart_name)
 
@@ -231,12 +241,9 @@ def add_chart():
         chart_path = create_subplots(product_codes, chart_name)
         if not chart_path:
             logging.warning("合并图表生成失败，可能是空间不足")
-
-            # 检查是否空间不足导致的失败
             if not has_sufficient_tmp_space():
                 logging.info("清空 /tmp 文件夹，释放空间")
                 clear_tmp_folder()
-                # 再次尝试生成图表
                 chart_path = create_subplots(product_codes, chart_name)
                 if not chart_path:
                     return jsonify({"error": "生成合并图表失败"}), 500
@@ -290,11 +297,9 @@ def delete_row():
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
 
-        # 执行删除操作
         cursor.execute("DELETE FROM products WHERE 产品代码 = ?", (product_code,))
         conn.commit()
 
-        # 检查删除操作是否成功
         if cursor.rowcount == 0:
             return jsonify({"error": "未找到指定的产品"}), 404
 
@@ -361,7 +366,6 @@ def has_sufficient_tmp_space():
     total, used, free = shutil.disk_usage(PROJECT_ROOT)
     free_mb = free // (1024 * 1024)
     return free_mb >= MAX_TMP_SPACE_MB * 0.1  # 剩余至少 10% 才认为足够
-
 
 def clear_tmp_folder():
     for filename in os.listdir(PROJECT_ROOT):
