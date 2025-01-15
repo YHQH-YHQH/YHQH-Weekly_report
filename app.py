@@ -314,16 +314,17 @@ def delete_row():
 
 def create_subplots(product_codes, chart_name):
     try:
+        # 1. 读取产品代码和产品名称映射
         conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "data.db"))
         cursor = conn.cursor()
-
         cursor.execute("SELECT 产品代码, 产品名称 FROM products")
         product_mapping = dict(cursor.fetchall())
         conn.close()
 
-        all_dates = []
+        # 2. 准备存储每个产品的 x, y 数据
         product_data = {}
 
+        # 3. 循环获取每个产品的 JSON 数据
         for product_code in product_codes:
             json_url = urljoin(BASE_URL, f"产品净值数据/output_charts/{product_code}_chart.json")
             response = requests.get(json_url, auth=AUTH)
@@ -331,27 +332,69 @@ def create_subplots(product_codes, chart_name):
                 try:
                     plotly_data = response.json()
                     if "data" in plotly_data:
+                        # 假设每个 JSON 包含多个 trace，这里取 "x" 和 "y"
                         for trace in plotly_data["data"]:
                             x_dates = pd.to_datetime(trace["x"])
                             y_values = trace["y"]
-                            all_dates.extend(x_dates)
-                            product_data[product_code] = {"x": x_dates, "y": y_values}
-                except Exception:
+                            if len(x_dates) > 0 and len(y_values) > 0:
+                                product_data[product_code] = {"x": x_dates, "y": y_values}
+                                break  # 只取第一个有效 trace
+                except Exception as e:
+                    logging.warning(f"解析 {product_code} JSON 数据时发生错误: {e}")
                     continue
 
-        if not all_dates:
-            logging.warning("无有效数据用于生成图表")
+        # 4. 如果没有任何有效数据，返回 None
+        if not product_data:
+            logging.warning("没有有效数据可用于生成图表")
             return None
 
-        rows, cols = len(product_codes), 1
-        fig = make_subplots(rows=rows, cols=cols)
+        # 5. 自动计算行列布局
+        n = len(product_codes)
+        rows = int((n - 1) ** 0.5) + 1  # 行数
+        cols = rows  # 列数，与行数相等
 
-        for idx, product_code in enumerate(product_codes):
+        # 6. 准备子图标题
+        subplot_titles = []
+        for code in product_codes:
+            product_name = product_mapping.get(code, "")  # 从映射中获取产品名称
+            subplot_titles.append(f"{code} {product_name}")
+
+        # 7. 创建子图
+        fig = make_subplots(
+            rows=rows,
+            cols=cols,
+            subplot_titles=subplot_titles  # 设置每个子图的标题
+        )
+
+        # 8. 循环添加数据到子图中
+        for i, product_code in enumerate(product_codes):
+            row = i // cols + 1
+            col = i % cols + 1
             if product_code in product_data:
                 x_data = product_data[product_code]["x"]
                 y_data = product_data[product_code]["y"]
-                fig.add_trace(go.Scatter(x=x_data, y=y_data, name=product_code), row=idx + 1, col=1)
 
+                # 添加 trace 到指定子图
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_data,
+                        y=y_data,
+                        mode="lines",
+                        name=product_code  # 图例显示产品代码
+                    ),
+                    row=row,
+                    col=col
+                )
+
+        # 9. 更新布局（调整图表大小和标题）
+        fig.update_layout(
+            height=rows * 400,  # 每行的高度
+            width=cols * 500,   # 每列的宽度
+            title_text="跨产品图表比较",  # 总标题
+            showlegend=True     # 显示图例
+        )
+
+        # 10. 保存图表到 HTML 文件并返回路径
         chart_path = os.path.join(OUTPUT_FOLDER, chart_name)
         fig.write_html(chart_path)
         logging.info(f"合并图表保存到：{chart_path}")
@@ -360,6 +403,7 @@ def create_subplots(product_codes, chart_name):
     except Exception as e:
         logging.error(f"生成合并图表时出现错误：{e}")
         return None
+
 
 
 def has_sufficient_tmp_space():
