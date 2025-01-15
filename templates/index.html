@@ -55,12 +55,13 @@
 <script>
     $(document).ready(function () {
         const password = prompt("请输入访问密码：");
-        let currentSortOrder = []; // 当前排序顺序的列 [{ column: "列名", order: "asc" }]
+        let currentSortOrder = []; // 存储表头点击排序的逻辑
+
         $("#mainContent").show();
-    
-        // 动态加载策略选项
+
+        // 1. 加载策略
         function loadStrategies() {
-            $.post("/strategies", { password: password })  // 使用 POST 发送密码
+            $.post("/strategies", { password: password })
                 .done(function (data) {
                     if (data.strategies && data.strategies.length > 0) {
                         const strategySelect = $("#strategySelect");
@@ -70,35 +71,50 @@
                             strategySelect.append(`<option value="${strategy}">${strategy}</option>`);
                         });
                     } else if (data.error) {
-                        alert(data.error);  // 如果后端返回密码错误
-                        location.reload();  // 重新加载页面以重新登录
+                        alert(data.error);
+                        location.reload();
                     }
                 })
                 .fail(function () {
                     alert("加载策略选项失败！");
                 });
         }
-    
-        // 动态加载表格数据
+
+        // 2. 加载表格数据
         function loadTableData() {
-            $.post("/table_data", { password: password })  // 使用 POST 发送密码
+            $.post("/table_data", { password: password })
                 .done(function (data) {
                     if (data.columns && data.columns.length > 0) {
-                        renderTable(data.columns, data.data);
+                        // -- 新增：在渲染前，先按固定排序逻辑：产品策略->本周收益(降)->上周收益(降)
+                        //    这样即使用户没点击表头，也能先呈现这一排好的顺序
+                        const sortedData = data.data.sort((a, b) => {
+                            // 先比产品策略(字符串升序)
+                            if (a["产品策略"] < b["产品策略"]) return -1;
+                            if (a["产品策略"] > b["产品策略"]) return 1;
+                            // 若产品策略相同，则比本周收益率(降序)
+                            const aw = parseFloat(a["本周收益率"] || 0);
+                            const bw = parseFloat(b["本周收益率"] || 0);
+                            if (bw !== aw) return bw - aw;
+                            // 若再相同，则比上周收益率(降序)
+                            const awp = parseFloat(a["上周收益率"] || 0);
+                            const bwp = parseFloat(b["上周收益率"] || 0);
+                            return bwp - awp;
+                        });
+                        renderTable(data.columns, sortedData);
                     } else if (data.error) {
-                        alert(data.error);  // 如果后端返回密码错误
-                        location.reload();  // 重新加载页面以重新登录
+                        alert(data.error);
+                        location.reload();
                     }
                 })
                 .fail(function () {
                     alert("加载表格数据失败！");
                 });
         }
-    
-        loadStrategies(); 
-        loadTableData();// 初始调用登录流程
-    
-        // 渲染表格数据
+
+        loadStrategies();
+        loadTableData();
+
+        // 表格渲染函数（含红绿染色、蓝色和橙色染色逻辑）
         function renderTable(columns, data) {
             const tableHead = $("#productTable thead tr");
             const tableBody = $("#productTable tbody");
@@ -111,69 +127,158 @@
             });
             tableHead.append("<th>操作</th>");
         
-            // 渲染数据
+            // 渲染每一行的数据
             data.forEach(row => {
                 let tableRow = "<tr>";
+        
+                // 解析“同策略表现”和“近8周排名”
+                const sameStrategyPerf = row["同策略表现"] || "";
+                const rank8Weeks = row["近8周排名"] || "";
+        
+                let strategyTotal = 0; // 默认总数为 0
+                let currentIndex = 0; // 当前产品在策略中的排名
+        
+                // 解析同策略表现，格式为 "5/(12)"
+                if (sameStrategyPerf.includes("/")) {
+                    const match = sameStrategyPerf.match(/^(\d+)\s*\/\s*\((\d+)\)$/); // 匹配 "数字/(数字)"
+                    if (match && match.length === 3) {
+                        currentIndex = parseInt(match[1], 10) || 0; // 提取分子 (当前产品序号)
+                        strategyTotal = parseInt(match[2], 10) || 0; // 提取分母 (同策略总数)
+                    }
+                }
+        
+                // 判断是否近8周排名都在前 30% 或 34%
+                let allTop = true;
+                let hasNa = false;
+                let topThreshold = 0.30; // 默认前30%
+                if (strategyTotal === 3) {
+                    topThreshold = 0.34; // 如果同策略只有3只，则前34%
+                }
+        
+                // 解析近8周排名，格式为 "(1, <NA>, 3, 2, 1, 1, 2, 3)"
+                if (rank8Weeks.startsWith("(") && rank8Weeks.endsWith(")")) {
+                    const inner = rank8Weeks.substring(1, rank8Weeks.length - 1); // 去掉括号
+                    const items = inner.split(","); // 分割每个值
+        
+                    for (let i = 0; i < items.length; i++) {
+                        const trimVal = items[i].trim(); // 去掉空格
+                        if (trimVal === "<NA>") {
+                            hasNa = true; // 如果有 <NA>，标记并退出
+                            break;
+                        }
+                        const val = parseInt(trimVal, 10); // 转换为整数
+                        if (!isNaN(val) && strategyTotal > 0) {
+                            const ratio = val / strategyTotal; // 计算比例
+                            if (ratio >= topThreshold) {
+                                allTop = false; // 只要有一个超出阈值，就不满足条件
+                                break;
+                            }
+                        } else {
+                            allTop = false; // 非数字的情况
+                            break;
+                        }
+                    }
+                } else {
+                    allTop = false; // 如果格式不对，直接标记不符合条件
+                }
+        
+                // 逐列渲染
                 columns.forEach(column => {
                     const cellValue = row[column] || "";
         
-                    // 特殊处理需要颜色的列
+                    // 原有红(>0)绿(<0)渲染逻辑
                     if (
                         column === "年化收益率" ||
                         column === "本周收益率" ||
                         column === "上周收益率" ||
                         column === "本年收益"
                     ) {
-                        // 解析数值并判断正负
-                        const numericValue = parseFloat(cellValue.replace(/%/g, "")); // 去掉百分号
+                        const numericValue = parseFloat(cellValue.replace(/%/g, ""));
                         if (!isNaN(numericValue)) {
                             const color = numericValue > 0 ? "red" : numericValue < 0 ? "green" : "black";
                             tableRow += `<td style="color: ${color};">${cellValue}</td>`;
                         } else {
-                            // 非数值情况（如空值）
+                            tableRow += `<td>${cellValue}</td>`;
+                        }
+                    } else if (column === "产品代码" || column === "产品名称") {
+                        // 蓝色着色逻辑
+                        if (strategyTotal > 2 && !hasNa && allTop) {
+                            tableRow += `<td style="color: blue;">${cellValue}</td>`;
+                        } else {
                             tableRow += `<td>${cellValue}</td>`;
                         }
                     } else {
-                        // 普通列直接添加
+                        // 普通列直接渲染
                         tableRow += `<td>${cellValue}</td>`;
                     }
                 });
         
-                // 添加操作按钮
+                // 最后一列操作按钮
                 tableRow += `
                     <td>
                         <button class="btn btn-danger btn-sm delete-row" data-code="${row["产品代码"]}">删除</button>
                         <button class="btn btn-info btn-sm download-chart" data-code="${row["产品代码"]}">下载图表</button>
                     </td>`;
                 tableRow += "</tr>";
-                tableBody.append(tableRow);
+        
+                // 构造 DOM 元素
+                const $rowElement = $(tableRow);
+        
+                // 橙色背景逻辑：同策略总数 <= 2
+                if (strategyTotal === 1 || strategyTotal === 2) {
+                    $rowElement.css("background-color", "orange");
+                }
+        
+                // 将行添加到表格
+                tableBody.append($rowElement);
             });
         }
 
 
-        // 筛选数据
+
+        // 前端事件 - 下拉筛选
         $("#strategySelect").change(function () {
             const strategy = $(this).val();
-            $.post("/filter", {strategy: strategy, password: password})
+            $.post("/filter", { strategy: strategy, password: password })
                 .done(function (data) {
-                    renderTable(data.columns, data.data);
+                    // 同样做一次固定排序（产品策略->本周收益->上周收益）
+                    const sortedData = data.data.sort((a, b) => {
+                        if (a["产品策略"] < b["产品策略"]) return -1;
+                        if (a["产品策略"] > b["产品策略"]) return 1;
+                        const aw = parseFloat(a["本周收益率"] || 0);
+                        const bw = parseFloat(b["本周收益率"] || 0);
+                        if (bw !== aw) return bw - aw;
+                        const awp = parseFloat(a["上周收益率"] || 0);
+                        const bwp = parseFloat(b["上周收益率"] || 0);
+                        return bwp - awp;
+                    });
+                    renderTable(data.columns, sortedData);
                 })
                 .fail(function () {
                     alert("筛选失败！");
                 });
         });
 
-        // 搜索并展示
+        // 前端事件 - 搜索并展示
         $("#searchButton").click(function () {
             const keywords = $("#searchInput").val();
             if (!keywords.trim()) {
                 alert("请输入搜索关键字！");
                 return;
             }
-
-            $.post("/search", {keywords: keywords, password: password})
+            $.post("/search", { keywords: keywords, password: password })
                 .done(function (data) {
-                    renderTable(data.columns, data.data);
+                    const sortedData = data.data.sort((a, b) => {
+                        if (a["产品策略"] < b["产品策略"]) return -1;
+                        if (a["产品策略"] > b["产品策略"]) return 1;
+                        const aw = parseFloat(a["本周收益率"] || 0);
+                        const bw = parseFloat(b["本周收益率"] || 0);
+                        if (bw !== aw) return bw - aw;
+                        const awp = parseFloat(a["上周收益率"] || 0);
+                        const bwp = parseFloat(b["上周收益率"] || 0);
+                        return bwp - awp;
+                    });
+                    renderTable(data.columns, sortedData);
                 })
                 .fail(function () {
                     alert("搜索失败！");
@@ -187,39 +292,50 @@
                 alert("请输入搜索关键字！");
                 return;
             }
-        
+
             $.post("/search", { keywords: keywords, password: password })
                 .done(function (data) {
-                    console.log("Search response:", data); // 打印返回数据
-        
-                    // 检查返回数据格式
                     if (data.columns && Array.isArray(data.columns) && data.data && Array.isArray(data.data)) {
                         const tableBody = $("#productTable tbody");
                         const existingProductCodes = new Set();
-        
-                        // 获取当前表格中所有产品代码
+
+                        // 收集当前表格已有的产品代码
                         $("#productTable tbody tr").each(function () {
                             const productCode = $(this).find("td:first").text();
                             existingProductCodes.add(productCode);
                         });
-        
-                        // 过滤掉已存在的产品代码
+
+                        // 过滤掉已存在的产品
                         const newRows = data.data.filter(row => !existingProductCodes.has(row["产品代码"]));
-        
                         if (newRows.length > 0) {
-                            // 合并现有数据和新数据，统一调用 renderTable 渲染
-                            const allRows = Array.from($("#productTable tbody tr")).map(tr => {
+                            // 将当前表格数据也抽取出来合并
+                            const allRows = [];
+                            $("#productTable tbody tr").each(function () {
                                 const rowData = {};
-                                $(tr).find("td").each((index, td) => {
-                                    rowData[data.columns[index]] = $(td).text();
+                                $(this).find("td").each((index, td) => {
+                                    const colName = index < data.columns.length ? data.columns[index] : null;
+                                    if (colName) {
+                                        rowData[colName] = $(td).text();
+                                    }
                                 });
-                                return rowData;
+                                allRows.push(rowData);
                             });
-        
+
                             // 合并新数据
                             const combinedData = allRows.concat(newRows);
-        
-                            // 重新渲染表格
+
+                            // 再进行固定排序
+                            combinedData.sort((a, b) => {
+                                if (a["产品策略"] < b["产品策略"]) return -1;
+                                if (a["产品策略"] > b["产品策略"]) return 1;
+                                const aw = parseFloat(a["本周收益率"] || 0);
+                                const bw = parseFloat(b["本周收益率"] || 0);
+                                if (bw !== aw) return bw - aw;
+                                const awp = parseFloat(a["上周收益率"] || 0);
+                                const bwp = parseFloat(b["上周收益率"] || 0);
+                                return bwp - awp;
+                            });
+
                             renderTable(data.columns, combinedData);
                         } else {
                             alert("搜索结果中没有新增的产品！");
@@ -233,26 +349,20 @@
                 });
         });
 
-
-
-
         // 删除数据
         $(document).on("click", ".delete-row", function () {
             const productCode = $(this).data("code");
-        
             if (confirm("确定要删除该产品吗？")) {
                 $.post("/delete_row", { product_code: productCode })
                     .done(function (response) {
                         if (response.success) {
                             alert("删除成功！");
-        
-                            // 检查表格中是否还有其他行
                             const rows = $("#productTable tbody tr");
                             if (rows.length > 1) {
                                 // 只删除当前行
                                 $(`button[data-code="${productCode}"]`).closest("tr").remove();
                             } else {
-                                // 如果是最后一行，刷新表格并显示所有产品
+                                // 如果是最后一行，刷新
                                 loadTableData();
                             }
                         } else {
@@ -265,66 +375,51 @@
             }
         });
 
-        // 初始化表格头部点击事件
+        // 表头点击排序（可二次排序）
         $("#productTable thead").on("click", "th", function () {
-            const column = $(this).text(); // 获取列名
-            if (!column) return; // 忽略空列点击
-    
-            // 更新当前排序逻辑
+            const column = $(this).text();
+            if (!column) return;
+
             updateSortOrder(column);
-    
-            // 获取表格行数据
+
             const rows = $("#productTable tbody tr").toArray();
-    
-            // 按排序规则排序
             rows.sort((a, b) => {
                 for (let { column, order } of currentSortOrder) {
                     const colIndex = $("#productTable thead th").filter((_, th) => $(th).text() === column).index();
                     const valA = $(a).find("td").eq(colIndex).text().trim();
                     const valB = $(b).find("td").eq(colIndex).text().trim();
-    
-                    // 按数值或字符串排序
                     let comparison = compareValues(valA, valB, order);
-                    if (comparison !== 0) return comparison; // 如果不相等，停止比较
+                    if (comparison !== 0) return comparison;
                 }
-                return 0; // 如果所有列都相等
+                return 0;
             });
-    
-            // 重新渲染排序后的行
             $("#productTable tbody").empty().append(rows);
         });
-    
-        // 更新排序顺序逻辑
-        function updateSortOrder(column) {
-            const existingIndex = currentSortOrder.findIndex((rule) => rule.column === column);
-    
+
+        function updateSortOrder(col) {
+            const existingIndex = currentSortOrder.findIndex(rule => rule.column === col);
             if (existingIndex >= 0) {
-                // 如果当前列已经存在排序规则，则切换排序顺序
-                currentSortOrder[existingIndex].order =
+                currentSortOrder[existingIndex].order = 
                     currentSortOrder[existingIndex].order === "asc" ? "desc" : "asc";
+                const rule = currentSortOrder.splice(existingIndex, 1)[0];
+                currentSortOrder.unshift(rule);
             } else {
-                // 如果当前列不存在排序规则，添加为降序
-                currentSortOrder.push({ column: column, order: "asc" });
+                currentSortOrder.unshift({ column: col, order: "asc" });
             }
-    
-            // 确保最新点击的列排在优先级最前
-            const newRule = currentSortOrder.splice(existingIndex, 1)[0]; // 删除旧规则
-            currentSortOrder.unshift(newRule); // 将新规则放到最前
         }
-    
-        // 比较两个值（支持字符串和数值比较）
+
         function compareValues(a, b, order) {
-            const numA = parseFloat(a.replace(/,/g, "")); // 转为数值（支持逗号格式）
+            const numA = parseFloat(a.replace(/,/g, ""));
             const numB = parseFloat(b.replace(/,/g, ""));
             const isNumeric = !isNaN(numA) && !isNaN(numB);
-    
+
             if (isNumeric) {
-                return order === "asc" ? numA - numB : numB - numA; // 数值比较
+                return order === "asc" ? numA - numB : numB - numA;
             } else {
-                return order === "asc" ? a.localeCompare(b) : b.localeCompare(a); // 字符串比较
+                return order === "asc" ? a.localeCompare(b) : b.localeCompare(a);
             }
         }
-    
+
         // 下载图表
         $(document).on("click", ".download-chart", function () {
             const productCode = $(this).data("code");
@@ -333,7 +428,6 @@
                     if (data.error) {
                         alert(data.error);
                     } else {
-                        // 创建隐藏链接并触发下载
                         const link = document.createElement("a");
                         link.href = `/output_charts/${productCode}_chart.html`;
                         link.download = `${productCode}_chart.html`;
@@ -347,34 +441,28 @@
                 });
         });
 
-        // 点击“生成并下载合并图表”按钮
+        // 生成并下载合并图表
         $("#generateChartButton").click(function () {
             const productCodes = [];
             $("#productTable tbody tr").each(function () {
                 const productCode = $(this).find("td:first").text();
                 productCodes.push(productCode);
             });
-        
             if (productCodes.length === 0) {
                 alert("没有产品可生成图表！");
                 return;
             }
-        
-            // 发送请求生成并下载图表
             $.post("/add_chart", { product_codes: productCodes, password: password })
                 .done(function () {
-                    // 根据产品代码生成文件名
                     let chartName;
                     if (productCodes.length > 3) {
                         chartName = `${productCodes.slice(0, 3).join("_")}_等_合并.html`;
                     } else {
                         chartName = `${productCodes.join("_")}_合并.html`;
                     }
-        
-                    // 创建隐藏链接并触发下载
                     const link = document.createElement("a");
-                    link.href = `/output_charts/${chartName}`; // 文件路径
-                    link.download = chartName; // 文件名
+                    link.href = `/output_charts/${chartName}`;
+                    link.download = chartName;
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
@@ -383,8 +471,6 @@
                     alert("生成合并图表失败！");
                 });
         });
-
-
     });
 </script>
 </body>
