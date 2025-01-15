@@ -353,25 +353,9 @@
         $(document).on("click", ".delete-row", function () {
             const productCode = $(this).data("code");
             if (confirm("确定要删除该产品吗？")) {
-                $.post("/delete_row", { product_code: productCode })
-                    .done(function (response) {
-                        if (response.success) {
-                            alert("删除成功！");
-                            const rows = $("#productTable tbody tr");
-                            if (rows.length > 1) {
-                                // 只删除当前行
-                                $(`button[data-code="${productCode}"]`).closest("tr").remove();
-                            } else {
-                                // 如果是最后一行，刷新
-                                loadTableData();
-                            }
-                        } else {
-                            alert("删除失败！");
-                        }
-                    })
-                    .fail(function () {
-                        alert("删除失败！");
-                    });
+                // 只移除前端表格中的这一行
+                $(`button[data-code="${productCode}"]`).closest("tr").remove();
+                // 不再进行任何POST请求，也不记录到deletedProducts
             }
         });
 
