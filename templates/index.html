@@ -15,11 +15,12 @@
     <div id="mainContent">
         <!-- 筛选 -->
         <div class="row mb-3">
-            <div class="col-md-4">
-                <label for="strategySelect" class="form-label">选择产品策略：</label>
+            <div class="col-md-4 d-flex">
+                <label for="strategySelect" class="form-label me-2">选择产品策略：</label>
                 <select id="strategySelect" class="form-select">
                     <option value="">-- 选择产品策略 --</option>
                 </select>
+                <button id="resetFilterButton" class="btn btn-outline-primary ms-2">重新筛选</button>
             </div>
             <div class="col-md-6">
                 <label for="searchInput" class="form-label">搜索产品：</label>
@@ -357,6 +358,35 @@
                 $(`button[data-code="${productCode}"]`).closest("tr").remove();
                 // 不再进行任何POST请求，也不记录到deletedProducts
             }
+        });
+
+        // 点击“重新筛选”按钮，根据当前选择的策略重新筛选
+        $("#resetFilterButton").click(function () {
+            const strategy = $("#strategySelect").val(); // 获取当前选择的策略
+            $.post("/filter", { strategy: strategy, password: password })
+                .done(function (data) {
+                    if (data.columns && data.data) {
+                        // 对返回的数据进行排序（如果有需要）
+                        const sortedData = data.data.sort((a, b) => {
+                            if (a["产品策略"] < b["产品策略"]) return -1;
+                            if (a["产品策略"] > b["产品策略"]) return 1;
+                            const aw = parseFloat(a["本周收益率"] || 0);
+                            const bw = parseFloat(b["本周收益率"] || 0);
+                            if (bw !== aw) return bw - aw;
+                            const awp = parseFloat(a["上周收益率"] || 0);
+                            const bwp = parseFloat(b["上周收益率"] || 0);
+                            return bwp - awp;
+                        });
+        
+                        // 渲染表格
+                        renderTable(data.columns, sortedData);
+                    } else {
+                        alert("筛选失败：未获取到有效数据！");
+                    }
+                })
+                .fail(function () {
+                    alert("重新筛选时发生错误！");
+                });
         });
 
         // 表头点击排序（可二次排序）
