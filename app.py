@@ -314,17 +314,18 @@ def delete_row():
 
 def create_subplots(product_codes, chart_name):
     try:
-        # 1. 读取产品代码和产品名称映射
+        # 1. 从 SQLite 数据库中获取 [产品代码 -> 产品名称] 映射
         conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "data.db"))
         cursor = conn.cursor()
         cursor.execute("SELECT 产品代码, 产品名称 FROM products")
         product_mapping = dict(cursor.fetchall())
         conn.close()
 
-        # 2. 准备存储每个产品的 x, y 数据
+        # 2. 准备一个字典，存储每个产品的所有 Trace
+        #    product_data[product_code] = [list_of_trace_dict]
         product_data = {}
 
-        # 3. 循环获取每个产品的 JSON 数据
+        # 3. 循环读取各产品对应的JSON文件，保留“最大回撤区域”“净值曲线”等所有 Trace
         for product_code in product_codes:
             json_url = urljoin(BASE_URL, f"产品净值数据/output_charts/{product_code}_chart.json")
             response = requests.get(json_url, auth=AUTH)
@@ -332,69 +333,100 @@ def create_subplots(product_codes, chart_name):
                 try:
                     plotly_data = response.json()
                     if "data" in plotly_data:
-                        # 假设每个 JSON 包含多个 trace，这里取 "x" 和 "y"
                         for trace in plotly_data["data"]:
-                            x_dates = pd.to_datetime(trace["x"])
-                            y_values = trace["y"]
+                            x_dates = pd.to_datetime(trace.get("x", []))
+                            y_values = trace.get("y", [])
                             if len(x_dates) > 0 and len(y_values) > 0:
-                                product_data[product_code] = {"x": x_dates, "y": y_values}
-                                break  # 只取第一个有效 trace
+                                # 初始化列表
+                                if product_code not in product_data:
+                                    product_data[product_code] = []
+
+                                # 将该 trace 的核心信息保存下来
+                                # 注意：我们把 "mode" "fill" "fillcolor" "hovertemplate" 等都保留
+                                # 并检查 yaxis 是否是 "y2"
+                                trace_dict = {
+                                    "x": x_dates,
+                                    "y": y_values,
+                                    "mode": trace.get("mode", "lines"),
+                                    "fill": trace.get("fill", None),
+                                    "fillcolor": trace.get("fillcolor", None),
+                                    "name": trace.get("name", product_code),
+                                    "hovertemplate": trace.get("hovertemplate", None),
+                                    "yaxis": trace.get("yaxis", "y")  # 如果是 "y2" 就用副轴
+                                }
+                                product_data[product_code].append(trace_dict)
+
                 except Exception as e:
                     logging.warning(f"解析 {product_code} JSON 数据时发生错误: {e}")
                     continue
 
-        # 4. 如果没有任何有效数据，返回 None
-        if not product_data:
+        # 4. 若所有产品都没有有效 Trace，返回 None
+        valid_products = [pc for pc in product_data if product_data[pc]]
+        if not valid_products:
             logging.warning("没有有效数据可用于生成图表")
             return None
 
-        # 5. 自动计算行列布局
+        # 5. 自动行列布局
         n = len(product_codes)
         rows = int((n - 1) ** 0.5) + 1  # 行数
-        cols = rows  # 列数，与行数相等
+        cols = rows  # 列数
 
-        # 6. 准备子图标题
+        # 6. 每个 subplot 标题： '产品代码 + 产品名称'
         subplot_titles = []
         for code in product_codes:
-            product_name = product_mapping.get(code, "")  # 从映射中获取产品名称
+            product_name = product_mapping.get(code, "")
             subplot_titles.append(f"{code} {product_name}")
 
-        # 7. 创建子图
+        # 7. 构造 specs，使每个子图都支持 secondary_y
+        specs = [[{"secondary_y": True} for _ in range(cols)] for _ in range(rows)]
+
+        # 8. 创建多子图，并加上标题
         fig = make_subplots(
             rows=rows,
             cols=cols,
-            subplot_titles=subplot_titles  # 设置每个子图的标题
+            subplot_titles=subplot_titles,
+            specs=specs
         )
 
-        # 8. 循环添加数据到子图中
+        # 9. 在多子图上逐一添加 Trace
         for i, product_code in enumerate(product_codes):
             row = i // cols + 1
             col = i % cols + 1
-            if product_code in product_data:
-                x_data = product_data[product_code]["x"]
-                y_data = product_data[product_code]["y"]
+            # 避免空数据的情况
+            if product_code not in product_data or not product_data[product_code]:
+                continue
 
-                # 添加 trace 到指定子图
-                fig.add_trace(
-                    go.Scatter(
-                        x=x_data,
-                        y=y_data,
-                        mode="lines",
-                        name=product_code  # 图例显示产品代码
-                    ),
-                    row=row,
-                    col=col
+            # 当前产品的多个 Trace
+            for trace_info in product_data[product_code]:
+                secondary_y = (trace_info["yaxis"] == "y2")  # 判断是否走副轴
+                scatter_obj = go.Scatter(
+                    x=trace_info["x"],
+                    y=trace_info["y"],
+                    mode=trace_info["mode"],
+                    name=trace_info["name"],
+                    fill=trace_info["fill"],
+                    fillcolor=trace_info["fillcolor"],
+                    hovertemplate=trace_info["hovertemplate"]
                 )
+                fig.add_trace(scatter_obj, row=row, col=col, secondary_y=secondary_y)
 
-        # 9. 更新布局（调整图表大小和标题）
+                # 如果是 y2，就让其 autorange = "reversed"
+                if secondary_y:
+                    fig.update_yaxes(
+                        autorange="reversed",
+                        row=row, col=col,
+                        secondary_y=True
+                    )
+
+        # 10. 布局调优，图例、大小、标题等
         fig.update_layout(
-            height=rows * 400,  # 每行的高度
-            width=cols * 500,   # 每列的宽度
-            title_text="跨产品图表比较",  # 总标题
-            showlegend=True     # 显示图例
+            height=rows * 400,
+            width=cols * 500,
+            title_text="跨产品图表比较",
+            showlegend=True
         )
 
-        # 10. 保存图表到 HTML 文件并返回路径
+        # 11. 写入 HTML 并返回路径
         chart_path = os.path.join(OUTPUT_FOLDER, chart_name)
         fig.write_html(chart_path)
         logging.info(f"合并图表保存到：{chart_path}")
@@ -403,7 +435,6 @@ def create_subplots(product_codes, chart_name):
     except Exception as e:
         logging.error(f"生成合并图表时出现错误：{e}")
         return None
-
 
 
 def has_sufficient_tmp_space():
