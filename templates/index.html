@@ -203,23 +203,27 @@
                             existingProductCodes.add(productCode);
                         });
         
-                        // 确保不重复添加已存在的数据
-                        data.data.forEach(row => {
-                            if (!existingProductCodes.has(row["产品代码"])) {
-                                let tableRow = "<tr>";
-                                // 按列顺序渲染数据
-                                data.columns.forEach(column => {
-                                    tableRow += `<td>${row[column] || ""}</td>`;
+                        // 过滤掉已存在的产品代码
+                        const newRows = data.data.filter(row => !existingProductCodes.has(row["产品代码"]));
+        
+                        if (newRows.length > 0) {
+                            // 合并现有数据和新数据，统一调用 renderTable 渲染
+                            const allRows = Array.from($("#productTable tbody tr")).map(tr => {
+                                const rowData = {};
+                                $(tr).find("td").each((index, td) => {
+                                    rowData[data.columns[index]] = $(td).text();
                                 });
-                                tableRow += `
-                                    <td>
-                                        <button class="btn btn-danger btn-sm delete-row" data-code="${row["产品代码"]}">删除</button>
-                                        <button class="btn btn-info btn-sm download-chart" data-code="${row["产品代码"]}">下载图表</button>
-                                    </td>`;
-                                tableRow += "</tr>";
-                                tableBody.prepend(tableRow); // 插入到表格顶部
-                            }
-                        });
+                                return rowData;
+                            });
+        
+                            // 合并新数据
+                            const combinedData = allRows.concat(newRows);
+        
+                            // 重新渲染表格
+                            renderTable(data.columns, combinedData);
+                        } else {
+                            alert("搜索结果中没有新增的产品！");
+                        }
                     } else {
                         alert("搜索失败：无效的响应数据！");
                     }
@@ -228,6 +232,7 @@
                     alert("搜索失败！");
                 });
         });
+
 
 
 
